@@ -8,7 +8,7 @@ export function buildIndex(corpus) {
   for (const f of corpus) {
     for (const b of f.blocks) {
       const t = norm(b.kind === 'row' ? b.cells.join(' ') : b.text);
-      spans.push({ start: offset, end: offset + t.length, n: b.n, file: f.fileIndex, filename: f.filename });
+      spans.push({ start: offset, end: offset + t.length, n: b.n, file: f.fileIndex, filename: f.filename, page: b.page });
       parts.push(t);
       offset += t.length + 1;
     }
@@ -31,7 +31,7 @@ export function verifyQuote(index, quote) {
     from = at + p.length;
   }
   const span = locate(index.spans, first);
-  return { ok: true, location: span ? { paragraph: span.n, file: span.file, filename: span.filename } : null };
+  return { ok: true, location: span ? { paragraph: span.n, file: span.file, filename: span.filename, ...(span.page ? { page: span.page } : {}) } : null };
 }
 
 /** Lọc danh sách bằng chứng; trả về bằng chứng đã xác thực và số bị loại. */

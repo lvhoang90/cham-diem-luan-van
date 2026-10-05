@@ -30,7 +30,7 @@ const cell = (text, w, o = {}) => new TableCell({
 });
 
 const PRIORITY = { bat_buoc: 'Bắt buộc', nen_lam: 'Nên thực hiện', goi_y: 'Gợi ý' };
-const refOf = (e) => `${e.file ? `tệp ${e.file}, ` : ''}${e.paragraph ? `đoạn ¶${e.paragraph}` : ''}`.replace(/, $/, '');
+const refOf = (e) => `${e.file ? `tệp ${e.file}, ` : ''}${e.paragraph ? `đoạn ¶${e.paragraph}` : ''}${e.page ? `, trang ${e.page}` : ''}`.replace(/, $/, '');
 
 function evidenceBlock(evs) {
   if (!evs?.length) return [];

@@ -4,10 +4,20 @@ import JSZip from 'jszip';
 
 export class DocxError extends Error {}
 
+/** Nhận .docx hoặc PDF có lớp chữ; chọn bộ đọc theo đuôi tệp. */
+export async function readDocument(buffer, filename) {
+  if (/\.pdf$/i.test(filename || '')) {
+    const { readPdf } = await import('./pdf-read.js');
+    return readPdf(buffer, filename);
+  }
+  return readDocx(buffer, filename);
+}
+
+
 /** Kiểm tra tệp thật sự là .docx rồi tách thành các khối văn bản có đánh số đoạn. */
 export async function readDocx(buffer, filename) {
   if (!/\.docx$/i.test(filename || '')) {
-    throw new DocxError(`Tệp "${filename}" không phải định dạng .docx. Vui lòng lưu lại từ Word bằng "Save as → Word Document (.docx)".`);
+    throw new DocxError(`Tệp "${filename}" không phải định dạng .docx hoặc .pdf. Với tệp .doc, hãy lưu lại từ Word bằng "Save as → Word Document (.docx)".`);
   }
   if (!buffer || buffer.length < 4 || buffer[0] !== 0x50 || buffer[1] !== 0x4b) {
     throw new DocxError(`Tệp "${filename}" không phải tệp Word hợp lệ (có thể bị hỏng hoặc chỉ đổi đuôi tệp).`);

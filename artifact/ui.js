@@ -55,9 +55,9 @@ function dropzone(zone, input, onFiles) {
   input.addEventListener('change', () => { onFiles([...input.files]); input.value = ''; });
 }
 function onlyDocx(files, into) {
-  const bad = files.filter((f) => !/\.docx$/i.test(f.name));
-  if (bad.length) into.textContent = `Chỉ nhận tệp .docx. Không nhận: ${bad.map((f) => f.name).join(', ')}. Hãy lưu lại từ Word bằng "Save as → Word Document (.docx)".`;
-  return files.filter((f) => /\.docx$/i.test(f.name));
+  const bad = files.filter((f) => !/\.(docx|pdf)$/i.test(f.name));
+  if (bad.length) into.textContent = `Chỉ nhận tệp .docx hoặc PDF có chữ (không phải bản scan). Không nhận: ${bad.map((f) => f.name).join(', ')}. Với tệp .doc, hãy lưu lại từ Word bằng "Save as → Word Document (.docx)".`;
+  return files.filter((f) => /\.(docx|pdf)$/i.test(f.name));
 }
 
 /* ===== Bước 1 ===== */
@@ -77,7 +77,7 @@ $('analyze').addEventListener('click', async () => {
   $('tplBusy').hidden = false; $('tplBusy').textContent = 'Đang đọc mẫu và nhận diện khung… có thể mất 10–40 giây (lần đầu sẽ hỏi quyền dùng Claude).';
   $('tplResult').hidden = true;
   try {
-    const file = state.tplSample ? state.tplFile : await readDocx(state.tplFile);
+    const file = state.tplSample ? state.tplFile : await readDocument(state.tplFile);
     state.tplParsed = file;
     state.template = await analyzeTemplate(file);
     renderTemplate(state.template);
@@ -98,7 +98,7 @@ $('tplOk').addEventListener('click', () => go(2));
 dropzone($('drop2'), $('file2'), async (files) => {
   const ok = onlyDocx(files, $('workList').previousElementSibling);
   for (const f of ok) if (state.works.length < 10 && !state.works.some((w) => w.filename === f.name && w.size === f.size)) {
-    try { const parsed = await readDocx(f); parsed.size = f.size; state.works = state.works.filter((w) => !w.sample); state.works.push(parsed); } catch (e) { alert_(e.message); }
+    try { const parsed = await readDocument(f); parsed.size = f.size; state.works = state.works.filter((w) => !w.sample); state.works.push(parsed); } catch (e) { alert_(e.message); }
   }
   renderWorks();
 });
@@ -180,7 +180,7 @@ function renderResult() {
     if (s.max_points > 0) body.append(h('p', {}, h('b', {}, 'Điểm: '), `${s.points}/${s.max_points}`, s.point_rationale ? ` — ${s.point_rationale}` : ''));
     for (const [title, key] of [['Ưu điểm', 'strengths'], ['Hạn chế', 'weaknesses']]) if (s[key].length) body.append(h('h4', {}, title + ' (mỗi dòng một ý)'), area(s[key].join('\n'), (v) => { s[key] = lines(v); }, 3));
     if (s.revisions.length) body.append(h('h4', {}, 'Yêu cầu/đề nghị chỉnh sửa'), h('ul', {}, s.revisions.map((x) => h('li', {}, h('b', {}, `[${PRI[x.priority] || 'Gợi ý'}] `), x.action))));
-    if (s.evidence.length) body.append(h('h4', {}, 'Căn cứ trong văn bản (đã đối chiếu với bản gốc)'), ...s.evidence.map((e) => h('div', { class: 'ev' }, `“${e.quote}”`, h('small', {}, `${e.filename ? e.filename + ' · ' : ''}đoạn ¶${e.paragraph || '?'}${e.note ? ' — ' + e.note : ''}`))));
+    if (s.evidence.length) body.append(h('h4', {}, 'Căn cứ trong văn bản (đã đối chiếu với bản gốc)'), ...s.evidence.map((e) => h('div', { class: 'ev' }, `“${e.quote}”`, h('small', {}, `${e.filename ? e.filename + ' · ' : ''}đoạn ¶${e.paragraph || '?'}${e.page ? `, trang ${e.page}` : ''}${e.note ? ' — ' + e.note : ''}`))));
     root.append(h('details', { class: 'sec', open: true }, h('summary', {}, `${s.number} ${s.title}`.trim()), body));
   }
   root.append(h('details', { class: 'sec', open: true }, h('summary', {}, 'Nhận xét tổng quát và kết luận'), h('div', { class: 'body' }, h('h4', {}, 'Nhận xét tổng quát'), area(r.overall.summary, (v) => { r.overall.summary = v; }, 6), h('h4', {}, 'Kết luận và kiến nghị'), area(r.overall.conclusion, (v) => { r.overall.conclusion = v; }, 5))));
@@ -203,7 +203,7 @@ async function buildDocx(r) {
   const H = (t, lv) => new Paragraph({ heading: [HeadingLevel.HEADING_1, HeadingLevel.HEADING_2, HeadingLevel.HEADING_3][lv - 1], children: [run(t, { bold: true, size: lv === 1 ? 28 : SIZE })], spacing: { before: lv === 1 ? 280 : 180, after: 100 }, keepNext: true });
   const bd = { style: BorderStyle.SINGLE, size: 4, color: '808080' }, borders = { top: bd, bottom: bd, left: bd, right: bd };
   const cell = (t, w, o = {}) => new TableCell({ borders, width: { size: w, type: WidthType.PERCENTAGE }, shading: o.head ? { fill: 'EDEDED' } : undefined, margins: { top: 60, bottom: 60, left: 100, right: 100 }, children: [new Paragraph({ children: [run(t, { bold: o.bold || o.head, size: 24 })], alignment: o.right ? AlignmentType.RIGHT : AlignmentType.LEFT })] });
-  const refOf = (e) => `${e.file ? `tệp ${e.file}, ` : ''}${e.paragraph ? `đoạn ¶${e.paragraph}` : ''}`.replace(/, $/, '');
+  const refOf = (e) => `${e.file ? `tệp ${e.file}, ` : ''}${e.paragraph ? `đoạn ¶${e.paragraph}` : ''}${e.page ? `, trang ${e.page}` : ''}`.replace(/, $/, '');
   const evb = (evs) => (evs?.length ? [P('Căn cứ trong văn bản:', { bold: true, after: 40 }), ...evs.map((e) => P(`“${s(e.quote)}” (${refOf(e) || 'vị trí không xác định'})`, { italics: true, size: 24, indent: 360, after: 60 }))] : []);
   const body = [], t = r.template || {};
   body.push(new Paragraph({ alignment: AlignmentType.CENTER, spacing: { after: 60 }, children: [run(s(t.title || 'PHIẾU NHẬN XÉT').toUpperCase(), { bold: true, size: 30 })] }));

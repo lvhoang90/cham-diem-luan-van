@@ -47,7 +47,7 @@ test('luồng đầy đủ: mẫu → công trình → kết quả → xuất .d
 });
 
 test('từ chối tệp không phải docx và mẫu hết hạn', async () => {
-  const bad = await fetch(`${base}/api/template`, { method: 'POST', body: form([['template', new Blob(['x']), 'mau.pdf']]) });
+  const bad = await fetch(`${base}/api/template`, { method: 'POST', body: form([['template', new Blob(['x']), 'mau.txt']]) });
   assert.equal(bad.status, 400);
   assert.match((await bad.json()).error, /\.docx/);
   const gone = await fetch(`${base}/api/review`, { method: 'POST', body: form([['templateId', 'nope'], ['works', docxBlob(await workDocx()), 'a.docx']]) });

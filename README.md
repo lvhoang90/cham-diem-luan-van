@@ -10,7 +10,7 @@
 4. Phân tích.
 5. Xem, **sửa trực tiếp** nội dung và điểm, rồi **tải bản nhận xét .docx** có cấu trúc đúng mẫu.
 
-Chỉ nhận tệp `.docx` (kiểm tra cả nội dung tệp, không chỉ đuôi tệp).
+Nhận tệp `.docx` và **PDF có lớp chữ** (kiểm tra cả nội dung tệp, không chỉ đuôi tệp). PDF dạng ảnh (bản scan) và PDF lỗi mã hóa phông tiếng Việt cũ bị từ chối kèm hướng dẫn. Với PDF, hệ thống dựng lại đoạn văn từ vị trí chữ, bỏ số trang và đầu/chân trang lặp lại, và ghi số trang vào phần trích dẫn; bảng biểu và chữ in đậm trong PDF không được nhận diện chính xác như trong .docx, nên mẫu nhận xét nên dùng .docx khi có thể.
 
 ## Điểm và khuyến nghị
 

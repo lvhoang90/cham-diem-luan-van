@@ -66,9 +66,36 @@ function htmlToBlocks(html) {
   }
   return blocks;
 }
+const PDF_SCAN_MSG = (n) => `Tệp "${n}" là PDF dạng ảnh (bản scan) hoặc không có lớp chữ. Hệ thống chỉ nhận PDF có chữ chọn/sao chép được. Hãy dùng bản gốc từ Word (Save as PDF), hoặc chạy nhận dạng ký tự (OCR) rồi lưu lại.`;
+const PDF_ENC_MSG = (n) => `Chữ trong tệp "${n}" bị lỗi mã hóa phông (thường gặp ở PDF dùng phông tiếng Việt cũ), nên không đọc đúng được. Hãy xuất lại PDF từ Word bằng phông Unicode (Times New Roman, Arial…) hoặc gửi bản .docx.`;
+let pdfReady = false;
+async function readPdf(file) {
+  const name = file.name;
+  const buf = await file.arrayBuffer();
+  if (new TextDecoder('latin1').decode(new Uint8Array(buf, 0, Math.min(5, buf.byteLength))) !== '%PDF-') throw new AppError(`Tệp "${name}" không phải tệp PDF hợp lệ (có thể bị hỏng hoặc chỉ đổi đuôi tệp).`);
+  if (!pdfReady) { pdfjsLib.GlobalWorkerOptions.workerSrc = URL.createObjectURL(new Blob([PDF_WORKER_SRC], { type: 'text/javascript' })); pdfReady = true; }
+  let doc;
+  try { doc = await pdfjsLib.getDocument({ data: new Uint8Array(buf), isEvalSupported: false, disableFontFace: true, verbosity: 0 }).promise; }
+  catch (e) { throw new AppError(e?.name === 'PasswordException' ? `Tệp "${name}" được bảo vệ bằng mật khẩu. Hãy gỡ mật khẩu rồi tải lại.` : `Không mở được tệp "${name}". Tệp có thể bị hỏng.`); }
+  try {
+    if (doc.numPages > 600) throw new AppError(`Tệp "${name}" có ${doc.numPages} trang, vượt giới hạn 600 trang. Hãy tách thành nhiều tệp.`);
+    const pages = [];
+    for (let p = 1; p <= doc.numPages; p++) {
+      const tc = await (await doc.getPage(p)).getTextContent();
+      pages.push(tc.items.filter((i) => typeof i.str === 'string').map((i) => ({ str: i.str, x: i.transform[4], y: i.transform[5], h: Math.abs(i.transform[3]) || i.height || 0, w: i.width || 0 })));
+    }
+    const problem = pdfTextProblem(pages.map((it) => it.map((i) => i.str).join(' ')));
+    if (problem === 'scan') throw new AppError(PDF_SCAN_MSG(name));
+    if (problem === 'encoding') throw new AppError(PDF_ENC_MSG(name));
+    const blocks = layoutPdfPages(pages);
+    if (!blocks.length) throw new AppError(PDF_SCAN_MSG(name));
+    return fileFromBlocks(name, blocks);
+  } finally { doc.destroy(); }
+}
+async function readDocument(file) { return /\.pdf$/i.test(file.name) ? readPdf(file) : readDocx(file); }
 async function readDocx(file) {
   const name = file.name;
-  if (!/\.docx$/i.test(name)) throw new AppError(`Tệp "${name}" không phải định dạng .docx. Vui lòng lưu lại từ Word bằng "Save as → Word Document (.docx)".`);
+  if (!/\.docx$/i.test(name)) throw new AppError(`Tệp "${name}" không phải định dạng .docx hoặc .pdf. Với tệp .doc, hãy lưu lại từ Word bằng "Save as → Word Document (.docx)".`);
   const buf = await file.arrayBuffer();
   const head = new Uint8Array(buf, 0, Math.min(4, buf.byteLength));
   if (head.length < 4 || head[0] !== 0x50 || head[1] !== 0x4b) throw new AppError(`Tệp "${name}" không phải tệp Word hợp lệ (có thể bị hỏng hoặc chỉ đổi đuôi tệp).`);
@@ -100,7 +127,7 @@ const outlineOf = (corpus) => corpus.flatMap((f) => f.blocks.filter((b) => b.kin
 const norm = (s) => String(s).normalize('NFC').toLowerCase().replace(/[^\p{L}\p{N}]+/gu, ' ').trim();
 function buildIndex(corpus) {
   const parts = [], spans = []; let off = 0;
-  for (const f of corpus) for (const b of f.blocks) { const t = norm(b.kind === 'row' ? b.cells.join(' ') : b.text); spans.push({ start: off, end: off + t.length, n: b.n, file: f.fileIndex, filename: f.filename }); parts.push(t); off += t.length + 1; }
+  for (const f of corpus) for (const b of f.blocks) { const t = norm(b.kind === 'row' ? b.cells.join(' ') : b.text); spans.push({ start: off, end: off + t.length, n: b.n, file: f.fileIndex, filename: f.filename, page: b.page }); parts.push(t); off += t.length + 1; }
   return { hay: parts.join(' '), spans };
 }
 function verifyQuote(index, quote) {
@@ -109,7 +136,7 @@ function verifyQuote(index, quote) {
   let from = 0, first = -1;
   for (const p of pieces) { const at = index.hay.indexOf(p, from); if (at < 0) return { ok: false }; if (first < 0) first = at; from = at + p.length; }
   const span = index.spans.find((s) => first >= s.start && first <= s.end);
-  return { ok: true, location: span ? { paragraph: span.n, file: span.file, filename: span.filename } : {} };
+  return { ok: true, location: span ? { paragraph: span.n, file: span.file, filename: span.filename, ...(span.page ? { page: span.page } : {}) } : {} };
 }
 function verifyEvidence(index, evidence) {
   const kept = []; let dropped = 0; const seen = new Set();

@@ -4,7 +4,7 @@ import path from 'node:path';
 import crypto from 'node:crypto';
 import { fileURLToPath } from 'node:url';
 import { config } from './config.js';
-import { readDocx, DocxError } from './docx-read.js';
+import { readDocument, DocxError } from './docx-read.js';
 import { analyzeTemplate, runReview } from './pipeline.js';
 import { buildDocx } from './export-docx.js';
 import { DOC_TYPES, ROLES } from './rubric.js';
@@ -45,7 +45,7 @@ export function createApp() {
   app.post('/api/template', upload.single('template'), async (req, res, next) => {
     try {
       if (!req.file) throw new DocxError('Chưa chọn tệp mẫu nhận xét.');
-      const file = await readDocx(req.file.buffer, fixName(req.file.originalname));
+      const file = await readDocument(req.file.buffer, fixName(req.file.originalname));
       const template = await analyzeTemplate(file);
       res.json({ templateId: put('template', template), filename: file.filename, words: file.words, template });
     } catch (e) { next(e); }
@@ -58,7 +58,7 @@ export function createApp() {
       if (!template) throw new DocxError('Mẫu nhận xét đã hết hạn hoặc chưa được tải. Vui lòng quay lại Bước 1.');
       if (!req.files?.length) throw new DocxError('Chưa chọn tệp công trình cần phản biện.');
       const workFiles = [];
-      for (const f of req.files) workFiles.push(await readDocx(f.buffer, fixName(f.originalname)));
+      for (const f of req.files) workFiles.push(await readDocument(f.buffer, fixName(f.originalname)));
       const meta = {
         docType: req.body.docType in DOC_TYPES ? req.body.docType : 'other',
         role: req.body.role in ROLES ? req.body.role : 'reviewer',

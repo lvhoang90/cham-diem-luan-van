@@ -44,10 +44,10 @@ function dropzone(zone, input, onFiles) {
   zone.addEventListener('drop', (e) => onFiles([...e.dataTransfer.files]));
   input.addEventListener('change', () => { onFiles([...input.files]); input.value = ''; });
 }
-const isDocx = (f) => /\.docx$/i.test(f.name);
+const isDocx = (f) => /\.(docx|pdf)$/i.test(f.name);
 function rejectNonDocx(files) {
   const bad = files.filter((f) => !isDocx(f));
-  if (bad.length) alert(`Chỉ chấp nhận tệp .docx. Không nhận: ${bad.map((f) => f.name).join(', ')}.\nVui lòng lưu lại từ Word bằng "Save as → Word Document (.docx)".`);
+  if (bad.length) alert(`Chỉ chấp nhận tệp .docx hoặc PDF có chữ (không phải bản scan). Không nhận: ${bad.map((f) => f.name).join(', ')}.\nVới tệp .doc, hãy lưu lại từ Word bằng "Save as → Word Document (.docx)".`);
   return files.filter(isDocx);
 }
 
@@ -223,7 +223,7 @@ function renderResult() {
       if (s[key].length) body.append(h('h4', {}, title + ' (mỗi dòng một ý)'), area(s[key].join('\n'), (v) => { s[key] = lines(v); }, 3));
     }
     if (s.revisions.length) body.append(h('h4', {}, 'Yêu cầu/đề nghị chỉnh sửa'), h('ul', {}, s.revisions.map((x) => h('li', {}, h('b', {}, `[${PRI[x.priority] || 'Gợi ý'}] `), x.action))));
-    if (s.evidence.length) body.append(h('h4', {}, 'Căn cứ trong văn bản (đã đối chiếu với bản gốc)'), ...s.evidence.map((e) => h('div', { class: 'ev' }, `“${e.quote}”`, h('small', {}, `${e.filename ? e.filename + ' · ' : ''}đoạn ¶${e.paragraph || '?'}${e.note ? ' — ' + e.note : ''}`))));
+    if (s.evidence.length) body.append(h('h4', {}, 'Căn cứ trong văn bản (đã đối chiếu với bản gốc)'), ...s.evidence.map((e) => h('div', { class: 'ev' }, `“${e.quote}”`, h('small', {}, `${e.filename ? e.filename + ' · ' : ''}đoạn ¶${e.paragraph || '?'}${e.page ? `, trang ${e.page}` : ''}${e.note ? ' — ' + e.note : ''}`))));
     root.append(h('details', { class: 'sec', open: true }, h('summary', {}, `${s.number} ${s.title}`.trim()), body));
   }
 

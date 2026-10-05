@@ -11,9 +11,9 @@
 
   <section id="step1" class="card step" hidden>
     <h2>Bước 1. Tải mẫu nhận xét của trường/viện</h2>
-    <p class="help">Tải tệp <b>.docx</b> là mẫu nhận xét đề cương/công trình hoặc mẫu góp ý, phản biện luận văn, luận án theo quy định của trường/viện. Bản nhận xét sẽ được soạn <b>đúng khung sườn của mẫu này</b>.</p>
-    <label class="drop" id="drop1" tabindex="0"><input type="file" id="file1" accept=".docx" hidden>
-      <strong>Nhấn để chọn tệp .docx</strong> hoặc kéo thả vào đây<span class="muted" id="name1"></span></label>
+    <p class="help">Tải tệp <b>.docx</b> (hoặc PDF có chữ) là mẫu nhận xét đề cương/công trình hoặc mẫu góp ý, phản biện luận văn, luận án theo quy định của trường/viện. Bản nhận xét sẽ được soạn <b>đúng khung sườn của mẫu này</b>.</p>
+    <label class="drop" id="drop1" tabindex="0"><input type="file" id="file1" accept=".docx,.pdf" hidden>
+      <strong>Nhấn để chọn tệp .docx hoặc PDF</strong> hoặc kéo thả vào đây<span class="muted" id="name1"></span></label>
     <div class="try"><button id="useSample" class="btn link">Chưa có tệp? Dùng bộ ví dụ có sẵn (mẫu phiếu + một đề cương thử)</button></div>
     <div class="actions"><span></span><button id="analyze" class="btn primary" disabled>Đọc mẫu và nhận diện khung</button></div>
     <div id="tplBusy" class="note" hidden role="status"></div>
@@ -29,9 +29,9 @@
 
   <section id="step2" class="card step" hidden>
     <h2>Bước 2. Tải công trình cần phản biện</h2>
-    <p class="help">Có thể tải <b>nhiều tệp .docx</b> (ví dụ từng chương luận văn, luận án, hoặc đề cương kèm phụ lục). Các tệp được đọc như một công trình theo thứ tự hiển thị dưới đây.</p>
-    <label class="drop" id="drop2" tabindex="0"><input type="file" id="file2" accept=".docx" multiple hidden>
-      <strong>Nhấn để chọn một hoặc nhiều tệp .docx</strong> hoặc kéo thả vào đây</label>
+    <p class="help">Có thể tải <b>nhiều tệp .docx hoặc PDF có chữ</b> (ví dụ từng chương luận văn, luận án, hoặc đề cương kèm phụ lục). PDF phải có chữ chọn/sao chép được; bản scan (ảnh) sẽ bị từ chối. Các tệp được đọc như một công trình theo thứ tự hiển thị dưới đây.</p>
+    <label class="drop" id="drop2" tabindex="0"><input type="file" id="file2" accept=".docx,.pdf" multiple hidden>
+      <strong>Nhấn để chọn một hoặc nhiều tệp .docx / PDF</strong> hoặc kéo thả vào đây</label>
     <ol id="workList" class="files"></ol>
     <div class="actions"><button class="btn" data-go="1">‹ Quay lại</button><button id="works2next" class="btn primary" disabled>Tiếp tục</button></div>
   </section>

@@ -12,12 +12,18 @@ const safe = (js) => js.replace(/<\/script/gi, '<\\/script').replace(/\uFFFD/g, 
 const out = process.argv[2] || path.join(root, 'artifact/dist/tro-ly-phan-bien.html');
 
 const prompts = `const SYSTEM_TEMPLATE = ${JSON.stringify(SYSTEM_TEMPLATE)};\nconst SYSTEM_REVIEWER = ${JSON.stringify(SYSTEM_REVIEWER)};`;
+// pdf-layout.js là hàm thuần dùng chung; bỏ từ khóa export để nhúng thẳng vào trang.
+const layout = rd('server/pdf-layout.js').replace(/^export /gm, '');
+const worker = `const PDF_WORKER_SRC = ${JSON.stringify(rd('node_modules/pdfjs-dist/build/pdf.worker.min.js'))};`;
 const app = ['artifact/core.js', 'artifact/pipeline.js', 'artifact/ui.js'].map(rd).join('\n');
 const html = `${rd('artifact/head.html')}\n${rd('artifact/body.html')}
 <script>${safe(rd('node_modules/mammoth/mammoth.browser.min.js'))}</script>
 <script>${safe(rd('node_modules/docx/dist/index.iife.js'))}</script>
+<script>${safe(rd('node_modules/pdfjs-dist/build/pdf.min.js'))}</script>
 <script>
 ${safe(prompts)}
+${safe(worker)}
+${safe(layout)}
 ${safe(app)}
 </script>
 `;
