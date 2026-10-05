@@ -1,0 +1,75 @@
+<header class="top"><div class="wrap top-in">
+  <div><h1>Trợ lý phản biện học thuật</h1><p class="sub">Soạn bản nháp nhận xét và đề xuất điểm theo đúng mẫu của trường/viện</p></div>
+  <span class="tag">Bản thử nghiệm</span>
+</div></header>
+<main class="wrap">
+  <ol class="steps" id="steps" aria-label="Các bước"></ol>
+  <section id="nosample" class="card" hidden>
+    <h2>Chưa dùng được Claude trong trang này</h2>
+    <p>Trang cần quyền gọi Claude bằng tài khoản của người xem. Hãy mở trang trong claude.ai, đăng nhập và cho phép khi được hỏi.</p>
+  </section>
+
+  <section id="step1" class="card step" hidden>
+    <h2>Bước 1. Tải mẫu nhận xét của trường/viện</h2>
+    <p class="help">Tải tệp <b>.docx</b> là mẫu nhận xét đề cương/công trình hoặc mẫu góp ý, phản biện luận văn, luận án theo quy định của trường/viện. Bản nhận xét sẽ được soạn <b>đúng khung sườn của mẫu này</b>.</p>
+    <label class="drop" id="drop1" tabindex="0"><input type="file" id="file1" accept=".docx" hidden>
+      <strong>Nhấn để chọn tệp .docx</strong> hoặc kéo thả vào đây<span class="muted" id="name1"></span></label>
+    <div class="try"><button id="useSample" class="btn link">Chưa có tệp? Dùng bộ ví dụ có sẵn (mẫu phiếu + một đề cương thử)</button></div>
+    <div class="actions"><span></span><button id="analyze" class="btn primary" disabled>Đọc mẫu và nhận diện khung</button></div>
+    <div id="tplBusy" class="note" hidden role="status"></div>
+    <div id="tplResult" hidden>
+      <h3>Khung mẫu hệ thống nhận diện được</h3>
+      <p class="help">Vui lòng đối chiếu với mẫu của quý vị. Nếu thiếu hoặc sai mục, hãy tải lại mẫu (nên dùng văn bản rõ ràng, không dùng ảnh chụp).</p>
+      <div id="tplSummary" class="note"></div>
+      <ol id="tplList" class="tpl"></ol>
+      <div id="tplInfo" class="muted"></div>
+      <div class="actions"><span></span><button id="tplOk" class="btn primary">Đúng khung mẫu — tiếp tục</button></div>
+    </div>
+  </section>
+
+  <section id="step2" class="card step" hidden>
+    <h2>Bước 2. Tải công trình cần phản biện</h2>
+    <p class="help">Có thể tải <b>nhiều tệp .docx</b> (ví dụ từng chương luận văn, luận án, hoặc đề cương kèm phụ lục). Các tệp được đọc như một công trình theo thứ tự hiển thị dưới đây.</p>
+    <label class="drop" id="drop2" tabindex="0"><input type="file" id="file2" accept=".docx" multiple hidden>
+      <strong>Nhấn để chọn một hoặc nhiều tệp .docx</strong> hoặc kéo thả vào đây</label>
+    <ol id="workList" class="files"></ol>
+    <div class="actions"><button class="btn" data-go="1">‹ Quay lại</button><button id="works2next" class="btn primary" disabled>Tiếp tục</button></div>
+  </section>
+
+  <section id="step3" class="card step" hidden>
+    <h2>Bước 3. Thông tin để hiệu chuẩn đánh giá</h2>
+    <div class="grid">
+      <label for="docType">Loại văn bản<select id="docType"></select></label>
+      <label for="role">Vai trò của quý vị<select id="role"></select></label>
+    </div>
+    <label for="field">Lĩnh vực/chuyên ngành <span class="muted">(không bắt buộc)</span><input id="field" maxlength="200" placeholder="Ví dụ: Quản lý giáo dục"></label>
+    <label for="notes">Lưu ý riêng cho bản nhận xét <span class="muted">(không bắt buộc)</span>
+      <textarea id="notes" rows="3" maxlength="2000" placeholder="Ví dụ: Trọng tâm xem xét tính phù hợp của phương pháp hỗn hợp; công trình đã qua vòng chỉnh sửa lần 1."></textarea></label>
+    <div class="actions"><button class="btn" data-go="2">‹ Quay lại</button><button class="btn primary" data-go="4">Tiếp tục</button></div>
+  </section>
+
+  <section id="step4" class="card step" hidden>
+    <h2>Bước 4. Xác nhận và phân tích</h2>
+    <div id="confirm" class="note"></div>
+    <ul class="notice">
+      <li>Nội dung tệp được gửi tới Claude bằng <b>tài khoản của người đang mở trang</b> và tính vào hạn mức của tài khoản đó. Hãy bảo đảm phù hợp quy định bảo mật của cơ quan quý vị.</li>
+      <li>Kết quả là <b>bản nháp hỗ trợ</b>. Quý vị cần thẩm định, chỉnh sửa và chịu trách nhiệm về nhận xét cuối cùng.</li>
+      <li>Hệ thống <b>không</b> kiểm tra đạo văn và không xác minh sự tồn tại của tài liệu tham khảo.</li>
+      <li>Phân tích có thể mất vài phút do mô hình đọc kỹ toàn văn.</li>
+    </ul>
+    <div id="runBox" hidden>
+      <div class="bar"><div id="barFill"></div></div>
+      <p id="runMsg" class="muted" role="status"></p>
+    </div>
+    <div id="runErr" class="alert danger" hidden role="alert"></div>
+    <div class="actions"><button class="btn" data-go="3" id="back3">‹ Quay lại</button>
+      <span><button id="stopBtn" class="btn" hidden>Dừng</button> <button id="runBtn" class="btn primary">Bắt đầu phân tích</button></span></div>
+  </section>
+
+  <section id="step5" class="step" hidden><div id="result"></div></section>
+</main>
+<footer class="wrap foot">Bản nháp do AI hỗ trợ soạn thảo, không thay thế phán đoán chuyên môn và trách nhiệm của người phản biện.</footer>
+<div id="bar5" class="stick" hidden>
+  <button id="restart" class="btn">Làm công trình khác</button>
+  <button id="exportBtn" class="btn primary">Lưu bản nhận xét (.docx)</button>
+</div>

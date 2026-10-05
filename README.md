@@ -44,3 +44,11 @@ Biến môi trường tùy chọn: `REVIEW_MODEL` (mặc định `claude-opus-5-
 ## Bảo mật
 
 Tệp chỉ nằm trong bộ nhớ, không ghi đĩa, không ghi nội dung vào nhật ký; kết quả tự xóa sau `JOB_TTL_MIN` phút (mặc định 120). Nội dung được gửi tới dịch vụ AI để phân tích — cần phù hợp quy định bảo mật của cơ quan. Nếu đặt máy chủ ra Internet, nên bật `ACCESS_CODE` và dùng HTTPS.
+
+## Bản artifact (chạy không cần máy chủ)
+
+`artifact/` + `scripts/build-artifact.mjs` ghép thành một trang HTML duy nhất để thử nhanh: đọc .docx ngay trong trình duyệt, gọi Claude bằng tài khoản của người xem (không cần khóa API), đối chiếu trích dẫn, tính điểm và lưu .docx. Lời nhắc dùng chung với máy chủ (`server/prompts.js`); logic thang điểm/ngưỡng được sao sang `artifact/core.js` nên cần sửa đồng thời khi đổi `server/rubric.js`.
+
+```bash
+node scripts/build-artifact.mjs   # ra artifact/dist/tro-ly-phan-bien.html
+```
