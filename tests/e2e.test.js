@@ -120,6 +120,19 @@ test('assemble: mục mẫu có điểm → quy đổi thang 100; mục thiếu 
   assert.ok(r.decision.floorApplied && r.decision.mismatch);
 });
 
+test('không có điểm thành phần: không kết luận "từ chối" oan, báo cần chấm thủ công', async () => {
+  const file = await readDocx(await workDocx(), 'w.docx');
+  const corpus = buildCorpus([file]);
+  const template = normalizeTemplate({ template_title: 'Mẫu', sections: [{ title: 'Nhận xét chung', kind: 'narrative' }] });
+  const raw = { sections: [{ section_id: 's1', content: 'x', evidence: [], points: 0 }], rubric_scores: [], overall: {} };
+  const rubric = [{ id: 'c1', label: 'A', max: 100 }];
+  const r = assemble({ raw, template, corpus, meta: { docType: 'proposal', role: 'reviewer' }, rubric, index: buildIndex(corpus), mode: 'direct', workFiles: [file] });
+  assert.equal(r.score.sumMax, 0);
+  assert.equal(r.decision.key, 'unscored');
+  assert.equal(r.decision.belowPass, false);
+  assert.ok(r.warnings.length >= 1);
+});
+
 test('mã truy cập được kiểm tra khi cấu hình', async () => {
   const { config } = await import('../server/config.js');
   config.accessCode = 'bi-mat';

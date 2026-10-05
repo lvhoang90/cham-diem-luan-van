@@ -204,7 +204,7 @@ function drawSummary() {
     const r = state.results[i];
     return h('tr', { class: r && i === state.cur ? 'cur' : '' },
       h('td', {}, h('b', {}, it.filename), r?.profile?.title && r.profile.title !== 'Không xác định' ? h('div', { class: 'muted' }, r.profile.title) : null, !r ? h('div', { class: 'muted' }, it.status === 'error' ? it.error : ST[it.status]) : null),
-      h('td', { class: 'n' }, r ? String(r.score.score100) : '—'),
+      h('td', { class: 'n' }, r && r.score.sumMax ? String(r.score.score100) : '—'),
       h('td', {}, r ? h('span', { class: 'pill ' + r.decision.severity }, r.decision.short, r.decision.belowPass ? ' ⚠' : '') : ''),
       h('td', {}, r ? h('button', { class: 'btn link', onclick: () => { state.cur = i; drawSummary(); renderDetail(); $('detail').scrollIntoView({ behavior: 'smooth' }); } }, 'Xem / sửa') : null));
   });
@@ -215,13 +215,13 @@ function recompute() {
   const r = state.result;
   const sumMax = r.score.rows.reduce((s, x) => s + x.max, 0), sum = r.score.rows.reduce((s, x) => s + x.points, 0);
   r.score.sum = round1(sum); r.score.sumMax = sumMax; r.score.score100 = sumMax ? round1((sum / sumMax) * 100) : 0;
-  r.decision = { ...decide(r.score.score100, r.fatalDefects), mismatch: null };
+  r.decision = { ...(sumMax ? decide(r.score.score100, r.fatalDefects) : UNSCORED), mismatch: null };
   drawVerdict(); drawSummary();
 }
 function drawVerdict() {
   const r = state.result, d = r.decision, sc = r.score;
   $('verdict').replaceChildren(h('div', { class: 'card' },
-    h('div', { class: 'score' }, h('div', { class: 'num' }, String(sc.score100), h('small', {}, ' /100')),
+    h('div', { class: 'score' }, h('div', { class: 'num' }, sc.sumMax ? String(sc.score100) : '—', h('small', {}, ' /100')),
       h('div', { style: 'flex:1;min-width:220px' }, h('div', { class: 'gauge' }, h('i', { style: `left:${Math.min(100, sc.score100)}%` })),
         h('div', { class: 'muted' }, 'Mốc: dưới 40 từ chối · 40–54 chỉnh sửa lớn · 55–59 chỉnh sửa trước khi thông qua · 60–74 có điều kiện · từ 75 thông qua'))),
     h('div', { class: 'alert ' + d.severity }, h('strong', {}, d.label), d.advice),

@@ -3,7 +3,7 @@ import { buildCorpus, corpusToText, corpusChars, blockLine } from './docx-read.j
 import { callJson, callText, LlmError } from './llm.js';
 import { TEMPLATE_SCHEMA, reviewSchema } from './schemas.js';
 import { SYSTEM_TEMPLATE, SYSTEM_REVIEWER, templatePrompt, digestPrompt, reviewPrompt } from './prompts.js';
-import { defaultRubric, computeScore, decide, DOC_TYPES, ROLES, DECISIONS, decisionFromScore } from './rubric.js';
+import { defaultRubric, computeScore, decide, UNSCORED, DOC_TYPES, ROLES, DECISIONS, decisionFromScore } from './rubric.js';
 import { buildIndex, verifyEvidence } from './verify.js';
 import { mockTemplate, mockReview } from './mock.js';
 
@@ -186,7 +186,7 @@ export function assemble({ raw, template, corpus, meta, rubric, index, mode, wor
 
   const fatal = (raw.fatal_defects || []).map((d) => ({ severity: d.severity === 'fatal' ? 'fatal' : 'serious', description: String(d.description || ''), evidence: ver(d.evidence) }));
   const integrity = (raw.integrity_notes || []).map((n) => ({ concern: String(n.concern || ''), suggested_check: String(n.suggested_check || ''), evidence: ver(n.evidence) }));
-  const decision = decide(sc.score100, fatal);
+  const decision = sc.sumMax ? decide(sc.score100, fatal) : UNSCORED;
   const modelDecision = raw.overall?.proposed_decision;
   const scoreDecision = decisionFromScore(sc.score100);
   const mismatch = modelDecision && modelDecision !== decision.key ? { model: modelDecision, modelLabel: DECISIONS[modelDecision]?.short, scoreBased: scoreDecision } : null;

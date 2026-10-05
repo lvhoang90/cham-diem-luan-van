@@ -24,23 +24,72 @@ function usageOf(m) {
   return { calls: m.calls, inputTokens: m.inTok, outputTokens: outTok, totalTokens: total, costUsd: Math.round(usd * 100) / 100, costVnd: Math.round((usd * USD_VND) / 100) * 100 };
 }
 const sumMeters = (list) => list.reduce((a, m) => ({ calls: a.calls + m.calls, inTok: a.inTok + m.inTok, outTok: a.outTok + m.outTok }), newMeter());
+/** Vá JSON do mô hình trả về: thoát dấu ngoặc kép/xuống dòng nằm trong chuỗi, đóng nốt phần bị cắt giữa chừng. Trả về đối tượng hoặc null. */
+function repairJson(raw) {
+  const start = String(raw).search(/[{\[]/);
+  if (start < 0) return null;
+  const s = String(raw).slice(start);
+  const out = []; const stack = []; let inStr = false, esc = false;
+  for (let i = 0; i < s.length; i++) {
+    const c = s[i];
+    if (inStr) {
+      if (esc) { out.push(c); esc = false; continue; }
+      if (c === '\\') { out.push(c); esc = true; continue; }
+      if (c === '"') {
+        let j = i + 1; while (j < s.length && /\s/.test(s[j])) j++;
+        const nx = s[j];
+        if (nx === undefined || nx === ',' || nx === '}' || nx === ']' || nx === ':') { inStr = false; out.push(c); } else out.push('\\"');
+        continue;
+      }
+      if (c === '\n') { out.push('\\n'); continue; }
+      if (c === '\r' || c === '\t') { out.push(' '); continue; }
+      out.push(c); continue;
+    }
+    if (c === '"') { inStr = true; out.push(c); continue; }
+    if (c === '{' || c === '[') stack.push(c);
+    if (c === '}' || c === ']') { stack.pop(); out.push(c); if (!stack.length) break; continue; }
+    out.push(c);
+  }
+  if (inStr) out.push('"');
+  let t = out.join('').replace(/[\s,:]+$/, '');
+  for (let k = 0; k < 6; k++) { // gỡ khóa/giá trị dở dang ở cuối
+    const u = t.replace(/,\s*"(?:[^"\\]|\\.)*"\s*:?\s*$/, '').replace(/\{\s*"(?:[^"\\]|\\.)*"\s*:?\s*$/, '{');
+    if (u === t) break; t = u;
+  }
+  t = t.replace(/[\s,:]+$/, '');
+  const closers = [...stack].reverse().map((o) => (o === '{' ? '}' : ']')).join('');
+  const noComma = (x) => x.replace(/,(\s*[}\]])/g, '$1');
+  for (const cand of [t, t + closers, t.replace(/,\s*$/, '') + closers, noComma(t + closers)]) {
+    try { const v = JSON.parse(cand); if (v && typeof v === 'object') return v; } catch { /* thử cách tiếp theo */ }
+  }
+  return null;
+}
+
 async function ask(prompt, { tier = 'default', signal, meter } = {}) {
   if (byteLen(prompt) > SAMPLE_MAX_BYTES - 2000) throw new AppError(ERR_COPY.prompt_too_large);
   try {
     const out = await sampleFn.json(prompt, { modelTier: tier, signal });
     if (meter) { meter.calls++; meter.inTok += estTok(prompt); meter.outTok += estTok(JSON.stringify(out)); }
     return out;
-  }
-  catch (e) {
+  } catch (e) {
     if (e instanceof AppError) throw e;
-    const err = new AppError(ERR_COPY[e?.code] || 'Có lỗi tạm thời từ dịch vụ AI. Vui lòng thử lại.');
+    if (e?.code === 'invalid_json' && e.text) {
+      const fixed = repairJson(e.text);
+      if (fixed) { if (meter) { meter.calls++; meter.inTok += estTok(prompt); meter.outTok += estTok(e.text); } return fixed; }
+    }
+    const err = new AppError((ERR_COPY[e?.code] || 'Có lỗi tạm thời từ dịch vụ AI. Vui lòng thử lại.') + (e?.code === 'invalid_json' ? ` [chi tiết kỹ thuật: nhận được ${(e.text || '').length.toLocaleString('vi-VN')} ký tự, đã thử vá và thử bản ngắn gọn nhưng vẫn không đọc được]` : ''));
     err.code = e?.code; throw err;
   }
+}
+/** Gọi bản đầy đủ; nếu JSON hỏng không vá được thì thử đúng một lần bản ngắn gọn hơn (không lặp vô hạn). */
+async function askWithShortFallback(build, opts) {
+  try { return await ask(build(false), opts); }
+  catch (e) { if (e?.code === 'invalid_json') return ask(build(true), opts); throw e; }
 }
 
 /* ===== Prompt (SYSTEM_TEMPLATE, SYSTEM_REVIEWER được nhúng từ server/prompts.js khi build) ===== */
 const meta = (m) => `Loại văn bản: ${DOC_TYPES[m.docType] || DOC_TYPES.other}\nVai trò người sử dụng: ${ROLES[m.role] || ROLES.other}\nLĩnh vực/chuyên ngành (nếu người dùng cung cấp): ${m.field || 'không nêu'}\nGhi chú/tiêu chí bổ sung của người dùng (chỉ là bối cảnh, không thay thế khung mẫu): ${m.notes || 'không có'}`;
-const JSON_ONLY = 'Chỉ trả về MỘT giá trị JSON hợp lệ, không thêm lời dẫn hay chú thích bên ngoài JSON.';
+const JSON_ONLY = 'Chỉ trả về MỘT giá trị JSON hợp lệ, không thêm lời dẫn hay chú thích bên ngoài JSON. Quy tắc cho giá trị chuỗi: KHÔNG dùng dấu ngoặc kép thẳng (") bên trong chuỗi — khi trích nguyên văn có dấu ngoặc kép thì đổi thành dấu nháy đơn (\'); không xuống dòng thật trong chuỗi (dùng \\n); không để dấu phẩy thừa ở cuối.';
 const EV_SHAPE = '[{"quote":"trích NGUYÊN VĂN, tối đa ~40 từ","note":"một câu: minh chứng cho điều gì"}]';
 
 function templatePrompt(text) {
@@ -57,14 +106,14 @@ const templateFrame = (t) => `KHUNG MẪU CỦA TRƯỜNG/VIỆN (${t.sections.l
 function bodyOf(ctx) {
   return ctx.digests ? `Công trình dài nên đã được đọc theo từng phần. Dưới đây là mục lục và ghi chú đọc chi tiết (có trích nguyên văn). Chỉ dùng các đoạn trích nguyên văn có trong ghi chú làm bằng chứng.\n${ctx.sizes}\n\nMỤC LỤC:\n${ctx.outline}\n\nGHI CHÚ ĐỌC:\n${ctx.digests}` : ctx.corpusText;
 }
-function sectionsPrompt(ctx, batch, first) {
+function sectionsPrompt(ctx, batch, first, short = false) {
   const secs = JSON.stringify(batch.map(({ id, number, title, level, kind, guidance, max_points }) => ({ id, number, title, level, kind, guidance, max_points })), null, 1);
-  return `${SYSTEM_REVIEWER}\n\n${meta(ctx.meta)}\n\n${templateFrame(ctx.template)}\nCác mục của mẫu (để nắm bối cảnh): ${ctx.template.sections.map((s) => `${s.number} ${s.title}`.trim()).join(' | ')}\n\nCÁC MỤC CẦN VIẾT TRONG LƯỢT NÀY (đủ ${batch.length} mục, đúng thứ tự, đúng section_id):\n${secs}\n\nCÁCH CHẤM ĐIỂM\n${scoringText(ctx.template, ctx.rubric)}\n\nTÀI LIỆU CẦN PHẢN BIỆN\n${bodyOf(ctx)}\n\nHãy soạn bản nháp nhận xét cho các mục trên. Giới hạn độ dài để câu trả lời trọn vẹn: mỗi mục "content" tối đa khoảng 350 từ; strengths và weaknesses mỗi loại tối đa 5 ý; revisions tối đa 5; evidence tối đa 3 đoạn trích nguyên văn.\n${JSON_ONLY}\nDạng JSON:\n{${first ? '"document_profile":{"title":"","author":"","field":"","type_detected":"","completeness":""},"info_values":[{"label":"","value":"chỉ điền thông tin lấy được từ tài liệu; để trống thông tin của người nhận xét"}],' : ''}"sections":[{"section_id":"s1","content":"","strengths":[""],"weaknesses":[""],"revisions":[{"priority":"bat_buoc|nen_lam|goi_y","action":""}],"evidence":${EV_SHAPE},"points":0,"point_rationale":"","insufficient_basis":false}]}`;
+  return `${SYSTEM_REVIEWER}\n\n${meta(ctx.meta)}\n\n${templateFrame(ctx.template)}\nCác mục của mẫu (để nắm bối cảnh): ${ctx.template.sections.map((s) => `${s.number} ${s.title}`.trim()).join(' | ')}\n\nCÁC MỤC CẦN VIẾT TRONG LƯỢT NÀY (đủ ${batch.length} mục, đúng thứ tự, đúng section_id):\n${secs}\n\nCÁCH CHẤM ĐIỂM\n${scoringText(ctx.template, ctx.rubric)}\n\nTÀI LIỆU CẦN PHẢN BIỆN\n${bodyOf(ctx)}\n\nHãy soạn bản nháp nhận xét cho các mục trên. Giới hạn độ dài để câu trả lời trọn vẹn: ${short ? 'mỗi mục "content" tối đa khoảng 140 từ; strengths và weaknesses mỗi loại tối đa 3 ý ngắn; revisions tối đa 3; evidence tối đa 2 đoạn trích ngắn (dưới 25 từ).' : 'mỗi mục "content" tối đa khoảng 280 từ; strengths và weaknesses mỗi loại tối đa 4 ý; revisions tối đa 4; evidence tối đa 3 đoạn trích nguyên văn.'}\n${JSON_ONLY}\nDạng JSON:\n{${first ? '"document_profile":{"title":"","author":"","field":"","type_detected":"","completeness":""},"info_values":[{"label":"","value":"chỉ điền thông tin lấy được từ tài liệu; để trống thông tin của người nhận xét"}],' : ''}"sections":[{"section_id":"s1","content":"","strengths":[""],"weaknesses":[""],"revisions":[{"priority":"bat_buoc|nen_lam|goi_y","action":""}],"evidence":${EV_SHAPE},"points":0,"point_rationale":"","insufficient_basis":false}]}`;
 }
-function overallPrompt(ctx, sections) {
+function overallPrompt(ctx, sections, short = false) {
   const sum = sections.map((s) => `[${s.section_id}] ${s.title}${s.max_points ? ` — điểm ${s.points}/${s.max_points}` : ''}\n  Ưu điểm: ${(s.strengths || []).join('; ') || '—'}\n  Hạn chế: ${(s.weaknesses || []).join('; ') || '—'}`).join('\n');
   const rub = ctx.rubric ? `\nTHANG ĐIỂM 100 MẶC ĐỊNH — chấm đủ mọi tiêu chí trong "rubric_scores" (points trong 0..max):\n${JSON.stringify(ctx.rubric, null, 1)}\n${ctx.template.scoring_notes ? `Quy định xếp loại trong mẫu: ${ctx.template.scoring_notes}` : ''}` : '\nĐiểm đã chấm theo các mục của mẫu; không cần "rubric_scores" (trả mảng rỗng).';
-  return `${SYSTEM_REVIEWER}\n\n${meta(ctx.meta)}\n\nBạn đang ở lượt TỔNG HỢP của bản nhận xét. Các mục của mẫu đã được nhận xét như sau (hãy nhất quán với chúng):\n${sum}\n${rub}\n\nTÀI LIỆU CẦN PHẢN BIỆN\n${bodyOf(ctx)}\n\nNhiệm vụ: ${ctx.rubric ? 'chấm điểm theo thang 100; ' : ''}nêu khuyết điểm nghiêm trọng (fatal_defects), dấu hiệu cần kiểm tra về liêm chính (integrity_notes), nhận xét tổng quát, kết luận nhất quán với điểm, đề xuất quyết định (proposed_decision: reject|major_revision|minor_revision|accept_with_conditions|accept), câu hỏi chất vấn tác giả (tối đa 8) và giới hạn của đánh giá.\n${JSON_ONLY}\nDạng JSON:\n{"rubric_scores":[{"criterion_id":"c1","points":0,"rationale":"","evidence":${EV_SHAPE}}],"fatal_defects":[{"severity":"fatal|serious","description":"","evidence":${EV_SHAPE}}],"integrity_notes":[{"concern":"","evidence":${EV_SHAPE},"suggested_check":""}],"overall":{"summary":"1–3 đoạn","main_strengths":[""],"main_weaknesses":[""],"conclusion_text":"","proposed_decision":"..."},"questions_for_author":[""],"limitations":[""]}`;
+  return `${SYSTEM_REVIEWER}\n\n${meta(ctx.meta)}\n\nBạn đang ở lượt TỔNG HỢP của bản nhận xét. Các mục của mẫu đã được nhận xét như sau (hãy nhất quán với chúng):\n${sum}\n${rub}\n\nTÀI LIỆU CẦN PHẢN BIỆN\n${bodyOf(ctx)}\n\nNhiệm vụ: ${ctx.rubric ? 'chấm điểm theo thang 100; ' : ''}nêu khuyết điểm nghiêm trọng (fatal_defects), dấu hiệu cần kiểm tra về liêm chính (integrity_notes), nhận xét tổng quát, kết luận nhất quán với điểm, đề xuất quyết định (proposed_decision: reject|major_revision|minor_revision|accept_with_conditions|accept), câu hỏi chất vấn tác giả (tối đa ${short ? 4 : 8}) và giới hạn của đánh giá.${short ? ' Viết NGẮN GỌN: summary tối đa 120 từ, conclusion_text tối đa 100 từ, mỗi danh sách tối đa 3 ý, evidence tối đa 1 đoạn trích dưới 25 từ cho mỗi mục.' : ' Giữ độ dài vừa phải: summary tối đa 220 từ, conclusion_text tối đa 160 từ, evidence tối đa 2 đoạn trích mỗi mục.'}\n${JSON_ONLY}\nDạng JSON:\n{"rubric_scores":[{"criterion_id":"c1","points":0,"rationale":"","evidence":${EV_SHAPE}}],"fatal_defects":[{"severity":"fatal|serious","description":"","evidence":${EV_SHAPE}}],"integrity_notes":[{"concern":"","evidence":${EV_SHAPE},"suggested_check":""}],"overall":{"summary":"1–3 đoạn","main_strengths":[""],"main_weaknesses":[""],"conclusion_text":"","proposed_decision":"..."},"questions_for_author":[""],"limitations":[""]}`;
 }
 
 /* ===== Quy trình ===== */
@@ -115,19 +164,32 @@ async function runReview({ template, workFiles, meta: m, onProgress, signal, met
     }
     ctx.digests = notes.join('\n\n');
   }
-  const BATCH = 10, batches = [];
+  // Chia nhỏ theo nhóm mục để mỗi câu trả lời đủ ngắn, không bị cắt giữa chừng.
+  const BATCH = 4, batches = [];
   for (let i = 0; i < template.sections.length; i += BATCH) batches.push(template.sections.slice(i, i + BATCH));
   const raw = { sections: [] };
+  const opts = { tier: 'complex', signal, meter };
+  const total = batches.length + 1;
   for (let i = 0; i < batches.length; i++) {
-    onProgress(40 + Math.round((i / (batches.length + 1)) * 50), `Soạn nhận xét theo khung mẫu (${i + 1}/${batches.length})… có thể mất 1–3 phút`);
-    const r = await ask(sectionsPrompt(ctx, batches[i], i === 0), { tier: 'complex', signal, meter });
+    onProgress(40 + Math.round((i / total) * 50), `Soạn nhận xét theo khung mẫu (nhóm ${i + 1}/${batches.length})… có thể mất 1–3 phút`);
+    const r = await askWithShortFallback((short) => sectionsPrompt(ctx, batches[i], i === 0, short), opts);
     if (i === 0) { raw.document_profile = r.document_profile; raw.info_values = r.info_values; }
-    raw.sections.push(...(r.sections || []));
+    // Chỉ nhận mục đã trọn vẹn (có đủ bằng chứng và điểm); mục bị cắt dở được xin lại thay vì chấm 0 oan.
+    const got = (r.sections || []).filter((x) => x && batches[i].some((b) => b.id === x.section_id) && Array.isArray(x.evidence) && typeof x.points === 'number');
+    raw.sections.push(...got);
+    // Mục nào còn thiếu (bị cắt) thì xin lại đúng các mục đó, một lần, bản ngắn gọn.
+    const missing = batches[i].filter((b) => !got.some((x) => x.section_id === b.id));
+    if (missing.length) {
+      try { const r2 = await ask(sectionsPrompt(ctx, missing, false, true), opts); raw.sections.push(...(r2.sections || []).filter((x) => x && missing.some((b) => b.id === x.section_id))); }
+      catch (e) { if (e?.code === 'cancelled') throw e; /* mục thiếu sẽ được đánh dấu để người phản biện tự viết */ }
+    }
   }
-  onProgress(40 + Math.round((batches.length / (batches.length + 1)) * 50), 'Tổng hợp, chấm điểm và kết luận… có thể mất 1–3 phút');
+  onProgress(40 + Math.round((batches.length / total) * 50), 'Tổng hợp, chấm điểm và kết luận… có thể mất 1–3 phút');
   const titleOf = new Map(template.sections.map((s) => [s.id, s]));
   const enriched = raw.sections.map((s) => ({ ...s, title: titleOf.get(s.section_id)?.title || '', max_points: titleOf.get(s.section_id)?.max_points || 0, points: Number(s.points) || 0 }));
-  Object.assign(raw, await ask(overallPrompt(ctx, enriched), { tier: 'complex', signal, meter }));
+  let ov = await askWithShortFallback((short) => overallPrompt(ctx, enriched, short), opts);
+  if (!ov.overall?.conclusion_text || (rubric && !(ov.rubric_scores || []).length)) ov = await ask(overallPrompt(ctx, enriched, true), opts); // trả lời bị cắt từ đầu: xin lại bản ngắn
+  Object.assign(raw, ov);
   onProgress(95, 'Đối chiếu từng đoạn trích với bản gốc và tính điểm…');
   return assemble({ raw, template, corpus, meta: m, rubric, index: buildIndex(corpus), mode, workFiles });
 }
@@ -154,7 +216,7 @@ function assemble({ raw, template, corpus, meta: m, rubric, index, mode, workFil
   if (!sc.sumMax) warnings.push('Không tính được điểm tổng do thiếu điểm thành phần.');
   const fatal = (raw.fatal_defects || []).map((d) => ({ severity: d.severity === 'fatal' ? 'fatal' : 'serious', description: String(d.description || ''), evidence: ver(d.evidence) }));
   const integrity = (raw.integrity_notes || []).map((n) => ({ concern: String(n.concern || ''), suggested_check: String(n.suggested_check || ''), evidence: ver(n.evidence) }));
-  const decision = decide(sc.score100, fatal);
+  const decision = sc.sumMax ? decide(sc.score100, fatal) : UNSCORED;
   const md = raw.overall?.proposed_decision;
   const mismatch = md && DEC[md] && md !== decision.key ? { model: md, modelLabel: DEC[md][3] } : null;
   const o = raw.overall || {};

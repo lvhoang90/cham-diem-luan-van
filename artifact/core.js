@@ -16,6 +16,7 @@ const DEC = {
   accept_with_conditions: ['caution', 'Thông qua có điều kiện — chỉnh sửa theo góp ý', 'Công trình đạt yêu cầu tối thiểu nhưng còn hạn chế cần khắc phục. Đề nghị thông qua với điều kiện tác giả hoàn thành các chỉnh sửa bắt buộc và được người hướng dẫn xác nhận.', 'Thông qua có điều kiện'],
   accept: ['ok', 'Thông qua — chỉnh sửa nhỏ (nếu có)', 'Công trình đáp ứng yêu cầu; chỉ cần hoàn thiện các điểm nhỏ nêu trong nhận xét.', 'Thông qua'],
 };
+const UNSCORED = { key: 'unscored', severity: 'caution', label: 'Chưa chấm được điểm — người phản biện cần tự chấm', short: 'Chưa có điểm', advice: 'Hệ thống không nhận được đủ điểm thành phần cho công trình này (câu trả lời của mô hình bị cắt hoặc hỏng). Vui lòng chạy lại riêng công trình này hoặc tự chấm điểm trong bảng điểm; khuyến nghị sẽ tự cập nhật khi có điểm.', floorApplied: false, belowPass: false };
 const ORDER = ['reject', 'major_revision', 'minor_revision', 'accept_with_conditions', 'accept'];
 const decisionFromScore = (s) => (s < TH.reject ? 'reject' : s < TH.major ? 'major_revision' : s < TH.pass ? 'minor_revision' : s < TH.good ? 'accept_with_conditions' : 'accept');
 function decide(score, fatal) {

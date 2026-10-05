@@ -212,7 +212,7 @@ function drawSummary() {
     const act = r ? h('button', { class: 'btn link', onclick: () => { state.cur = it.index; drawSummary(); renderDetail(); $('detail').scrollIntoView({ behavior: 'smooth' }); } }, 'Xem / sửa') : null;
     return h('tr', { class: r && it.index === state.cur ? 'cur' : '' },
       h('td', {}, h('b', {}, it.filename), r?.profile?.title && r.profile.title !== 'Không xác định' ? h('div', { class: 'muted' }, r.profile.title) : null, !r ? h('div', { class: 'muted' }, it.status === 'error' ? it.error : ST[it.status]) : null),
-      h('td', { class: 'n' }, r ? String(r.score.score100) : '—'),
+      h('td', { class: 'n' }, r && r.score.sumMax ? String(r.score.score100) : '—'),
       h('td', {}, r ? h('span', { class: 'pill ' + r.decision.severity }, r.decision.short, r.decision.belowPass ? ' ⚠' : '') : ''),
       h('td', {}, act));
   });
@@ -225,6 +225,7 @@ function recompute() {
   const sum = r.score.rows.reduce((s, x) => s + x.points, 0);
   r.score.sum = Math.round(sum * 10) / 10; r.score.sumMax = sumMax;
   r.score.score100 = sumMax ? Math.round((sum / sumMax) * 1000) / 10 : 0;
+  if (!sumMax) { drawVerdict(); drawSummary(); return; }
   const { key, floor } = decideClient(r.score.score100, r.fatalDefects);
   Object.assign(r.decision, { key, label: DEC[key][1], short: DEC[key][1], advice: DEC[key][2], severity: DEC[key][0], floorApplied: floor, belowPass: r.score.score100 < state.health.thresholds.pass || key === 'major_revision' || key === 'reject' });
   r.decision.mismatch = null;
@@ -237,7 +238,7 @@ function drawVerdict() {
   box.replaceChildren(
     h('div', { class: 'card' },
       h('div', { class: 'score' },
-        h('div', { class: 'num' }, String(sc.score100), h('small', {}, ' /100')),
+        h('div', { class: 'num' }, sc.sumMax ? String(sc.score100) : '—', h('small', {}, ' /100')),
         h('div', { style: 'flex:1;min-width:220px' }, h('div', { class: 'gauge' }, h('i', { style: `left:${Math.min(100, sc.score100)}%` })),
           h('div', { class: 'muted' }, 'Mốc: dưới 40 từ chối · 40–54 chỉnh sửa lớn · 55–59 chỉnh sửa trước khi thông qua · 60–74 có điều kiện · từ 75 thông qua'))),
       h('div', { class: 'alert ' + d.severity }, h('strong', {}, d.label), d.advice),
