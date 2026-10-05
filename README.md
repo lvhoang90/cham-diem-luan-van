@@ -5,10 +5,10 @@
 ## Cách dùng (5 bước có hướng dẫn)
 
 1. **Tải mẫu nhận xét** (.docx) của trường/viện. Hệ thống nhận diện khung (các mục, hướng dẫn, điểm nếu có) để người dùng đối chiếu và xác nhận.
-2. **Tải công trình cần phản biện** (một hoặc nhiều tệp .docx, ví dụ từng chương).
+2. **Tải các công trình cần phản biện**: nhiều tệp. **Mỗi tệp là một công trình của một người**; hệ thống đọc tuần tự từng tệp, nhận xét riêng và xuất một bản nhận xét riêng cho từng tệp (không dùng chung ngữ cảnh giữa các tệp). Công trình gồm nhiều chương thì gộp thành một tệp trước khi tải.
 3. Chọn loại văn bản, vai trò, lĩnh vực (tùy chọn).
 4. Phân tích.
-5. Xem, **sửa trực tiếp** nội dung và điểm, rồi **tải bản nhận xét .docx** có cấu trúc đúng mẫu.
+5. Xem bảng tổng hợp (điểm, khuyến nghị, cảnh báo dưới 60 của từng công trình), chọn từng công trình để **sửa trực tiếp** nội dung và điểm, rồi tải **bản nhận xét .docx riêng** của công trình đó có cấu trúc đúng mẫu, hoặc tải **tất cả (.zip)**. Một công trình lỗi (ví dụ PDF scan) không làm dừng các công trình khác; có thể bấm dừng giữa chừng và vẫn giữ các công trình đã xong.
 
 Nhận tệp `.docx` và **PDF có lớp chữ** (kiểm tra cả nội dung tệp, không chỉ đuôi tệp). PDF dạng ảnh (bản scan) và PDF lỗi mã hóa phông tiếng Việt cũ bị từ chối kèm hướng dẫn. Với PDF, hệ thống dựng lại đoạn văn từ vị trí chữ, bỏ số trang và đầu/chân trang lặp lại, và ghi số trang vào phần trích dẫn; bảng biểu và chữ in đậm trong PDF không được nhận diện chính xác như trong .docx, nên mẫu nhận xét nên dùng .docx khi có thể.
 
@@ -39,7 +39,7 @@ npm run demo                        # không gọi AI, nội dung minh họa đ�
 npm test
 ```
 
-Biến môi trường tùy chọn: `REVIEW_MODEL` (mặc định `claude-opus-5-5`), `REVIEW_EFFORT` (`high`), `ACCESS_CODE` (bật mã truy cập), `PORT`, `MAX_FILE_MB`, `MAX_WORK_FILES`, `MAX_DIRECT_CHARS`, `JOB_TTL_MIN`.
+Biến môi trường tùy chọn: `REVIEW_MODEL` (mặc định `claude-opus-5-5`), `REVIEW_EFFORT` (`high`), `ACCESS_CODE` (bật mã truy cập), `PORT`, `MAX_FILE_MB` (60), `MAX_WORK_FILES` (40 công trình mỗi lô), `BATCH_CONCURRENCY` (1 = tuần tự), `MAX_OUTPUT_TOKENS` (128000), `MAX_DIRECT_CHARS` (1.000.000 ký tự đọc nguyên văn một lượt; dài hơn thì đọc từng phần), `JOB_TTL_MIN` (360).
 
 ## Bảo mật
 

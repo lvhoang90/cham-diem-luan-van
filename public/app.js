@@ -105,31 +105,47 @@ function renderConfirm() {
   const dt = $('docType').selectedOptions[0]?.textContent, ro = $('role').selectedOptions[0]?.textContent;
   $('confirm').replaceChildren(
     h('div', {}, h('b', {}, 'Mẫu: '), state.template?.template_title || ''),
-    h('div', {}, h('b', {}, 'Công trình: '), state.works.map((f) => f.name).join('; ')),
+    h('div', {}, h('b', {}, 'Công trình: '), `${state.works.length} tệp — mỗi tệp là một công trình riêng: ` + state.works.map((f) => f.name).join('; ')),
     h('div', {}, h('b', {}, 'Loại văn bản: '), dt || '', ' · ', h('b', {}, 'Vai trò: '), ro || ''));
 }
+const ST = { queued: 'Chờ đến lượt', running: 'Đang phân tích', done: 'Xong', error: 'Lỗi', cancelled: 'Đã dừng' };
+function drawQueue(items) {
+  $('queue').replaceChildren(...items.map((it) => h('li', { class: 'q ' + it.status },
+    h('div', { class: 'qh' }, h('span', { class: 'qn' }, it.filename), h('span', { class: 'badge' }, ST[it.status] || it.status)),
+    it.status === 'running' ? h('div', { class: 'bar' }, h('div', { class: 'fill', style: `width:${it.progress}%` })) : null,
+    h('div', { class: 'muted' }, it.status === 'error' ? it.error : it.status === 'done' && it.summary ? `Điểm đề xuất ${it.summary.score100}/100 — ${it.summary.decision}` : it.message))));
+  const done = items.filter((i) => ['done', 'error', 'cancelled'].includes(i.status)).length;
+  $('barFill').style.width = Math.max(3, Math.round((done / items.length) * 100)) + '%';
+  $('runMsg').textContent = `Đã xử lý ${done}/${items.length} công trình (tuần tự, mỗi công trình một bản nhận xét riêng).`;
+}
+let jobId = null;
 $('runBtn').addEventListener('click', async () => {
-  $('runErr').hidden = true; $('runBox').hidden = false; $('runBtn').disabled = true; $('back3').disabled = true;
-  $('barFill').style.width = '3%'; $('runMsg').textContent = 'Đang tải tệp lên…';
+  $('runErr').hidden = true; $('runBox').hidden = false; $('runBtn').disabled = true; $('back3').disabled = true; $('stopBtn').hidden = false;
+  $('barFill').style.width = '3%'; $('runMsg').textContent = 'Đang tải tệp lên…'; $('queue').replaceChildren();
+  let items = [];
   try {
     const fd = new FormData();
     fd.append('templateId', state.templateId);
     for (const k of ['docType', 'role', 'field', 'notes']) fd.append(k, $(k).value);
     state.works.forEach((f) => fd.append('works', f));
-    const { jobId } = await api('/api/review', { method: 'POST', body: fd });
+    ({ jobId } = await api('/api/review', { method: 'POST', body: fd }));
     for (;;) {
       await new Promise((r) => setTimeout(r, 2000));
       const j = await api('/api/review/' + jobId);
-      $('barFill').style.width = j.progress + '%'; $('runMsg').textContent = j.message || '';
-      if (j.status === 'error') throw new Error(j.error);
-      if (j.status === 'done') { state.result = j.result; break; }
+      items = j.items; drawQueue(items);
+      if (j.status === 'done') break;
     }
-    renderResult(); go(5);
+    state.results = {}; state.items = items;
+    for (const it of items) if (it.status === 'done') state.results[it.index] = await api(`/api/review/${jobId}/${it.index}`);
+    const first = items.find((i) => i.status === 'done');
+    if (!first) throw new Error('Không có công trình nào được phân tích thành công. Xem lý do ở từng tệp phía trên.');
+    state.cur = first.index; renderResults(); go(5);
   } catch (e) {
     $('runErr').textContent = e.message; $('runErr').hidden = false;
   }
-  $('runBtn').disabled = false; $('back3').disabled = false;
+  $('runBtn').disabled = false; $('back3').disabled = false; $('stopBtn').hidden = true;
 });
+$('stopBtn').addEventListener('click', async () => { if (jobId) { try { await api(`/api/review/${jobId}/cancel`, { method: 'POST' }); $('stopBtn').hidden = true; $('runMsg').textContent = 'Đang dừng sau công trình hiện tại…'; } catch { /* bỏ qua */ } } });
 
 // ---------- Bước 5
 const PRI = { bat_buoc: 'Bắt buộc', nen_lam: 'Nên thực hiện', goi_y: 'Gợi ý' };
@@ -158,6 +174,26 @@ const DEC = {
   accept: ['ok', 'Thông qua — chỉnh sửa nhỏ (nếu có)', 'Công trình đáp ứng yêu cầu; hoàn thiện các điểm nhỏ nêu trong nhận xét.'],
 };
 
+function renderResults() {
+  const root = $('result');
+  root.replaceChildren(h('h2', {}, 'Bước 5. Bản nháp nhận xét — mỗi công trình một bản riêng'), h('p', { class: 'help' }, 'Mỗi tệp được phân tích độc lập, không lẫn nội dung giữa các tác giả. Chọn một dòng để xem, sửa và tải bản nhận xét của công trình đó.'), h('div', { id: 'summary', class: 'tablewrap' }), h('div', { id: 'detail' }));
+  drawSummary(); renderDetail();
+  $('zipBtn').hidden = Object.keys(state.results).length < 2;
+}
+const SEV = { danger: 'danger', warning: 'warning', caution: 'caution', ok: 'ok' };
+function drawSummary() {
+  const rows = state.items.map((it) => {
+    const r = state.results[it.index];
+    const act = r ? h('button', { class: 'btn link', onclick: () => { state.cur = it.index; drawSummary(); renderDetail(); $('detail').scrollIntoView({ behavior: 'smooth' }); } }, 'Xem / sửa') : null;
+    return h('tr', { class: r && it.index === state.cur ? 'cur' : '' },
+      h('td', {}, h('b', {}, it.filename), r?.profile?.title && r.profile.title !== 'Không xác định' ? h('div', { class: 'muted' }, r.profile.title) : null, !r ? h('div', { class: 'muted' }, it.status === 'error' ? it.error : ST[it.status]) : null),
+      h('td', { class: 'n' }, r ? String(r.score.score100) : '—'),
+      h('td', {}, r ? h('span', { class: 'pill ' + r.decision.severity }, r.decision.short, r.decision.belowPass ? ' ⚠' : '') : ''),
+      h('td', {}, act));
+  });
+  $('summary').replaceChildren(h('table', {}, h('thead', {}, h('tr', {}, h('th', {}, 'Công trình (tệp)'), h('th', { class: 'n' }, 'Điểm /100'), h('th', {}, 'Khuyến nghị'), h('th', {}, ''))), h('tbody', {}, rows)));
+}
+
 function recompute() {
   const r = state.result;
   const sumMax = r.score.rows.reduce((s, x) => s + x.max, 0);
@@ -167,7 +203,7 @@ function recompute() {
   const { key, floor } = decideClient(r.score.score100, r.fatalDefects);
   Object.assign(r.decision, { key, label: DEC[key][1], short: DEC[key][1], advice: DEC[key][2], severity: DEC[key][0], floorApplied: floor, belowPass: r.score.score100 < state.health.thresholds.pass || key === 'major_revision' || key === 'reject' });
   r.decision.mismatch = null;
-  drawVerdict();
+  drawVerdict(); drawSummary();
 }
 
 function drawVerdict() {
@@ -186,12 +222,12 @@ function drawVerdict() {
       d.mismatch ? h('p', { class: 'muted' }, `Nhận định văn bản của mô hình (${d.mismatch.modelLabel}) khác mức theo ngưỡng điểm; xin cân nhắc.`) : null));
 }
 
-function renderResult() {
-  const r = state.result;
-  const root = $('result');
+function renderDetail() {
+  const r = state.result = state.results[state.cur];
+  const root = $('detail');
   root.replaceChildren();
   if (r.demo) root.append(h('div', { class: 'alert caution' }, h('strong', {}, 'CHẾ ĐỘ DEMO'), 'Nội dung dưới đây chỉ để thử giao diện, không phải đánh giá thật.'));
-  root.append(h('h2', {}, 'Bước 5. Bản nháp nhận xét và đề xuất điểm'));
+  root.append(h('h3', { class: 'who' }, 'Công trình: ', r.files[0].name, r.profile?.title && r.profile.title !== 'Không xác định' ? h('div', { class: 'muted' }, r.profile.title + (r.profile.author && r.profile.author !== 'Không xác định' ? ` — ${r.profile.author}` : '')) : null));
   root.append(h('div', { id: 'verdict' }));
   if (r.warnings.length) root.append(h('div', { class: 'alert caution' }, r.warnings.map((w) => h('div', {}, w))));
   root.append(h('p', { class: 'muted' }, `Đã đối chiếu ${r.verification.kept} đoạn trích với bản gốc; loại ${r.verification.dropped} đoạn không khớp. Quý vị có thể sửa trực tiếp mọi nội dung và điểm dưới đây trước khi tải về.`));
@@ -238,17 +274,25 @@ function renderResult() {
   drawVerdict();
 }
 
+async function saveBlob(res, fallback) {
+  const cd = res.headers.get('content-disposition') || '';
+  const m = cd.match(/filename\*=UTF-8''([^;]+)/);
+  const name = m ? decodeURIComponent(m[1]) : fallback;
+  const a = h('a', { href: URL.createObjectURL(await res.blob()), download: name });
+  document.body.append(a); a.click(); a.remove();
+}
+const post = (path, body) => api(path, { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify(body) });
 $('exportBtn').addEventListener('click', async () => {
   const btn = $('exportBtn'); btn.disabled = true;
-  try {
-    const res = await api('/api/export', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify(state.result) });
-    const blob = await res.blob();
-    const a = h('a', { href: URL.createObjectURL(blob), download: 'Ban-nhan-xet-phan-bien.docx' });
-    document.body.append(a); a.click(); a.remove();
-  } catch (e) { alert(e.message); }
+  try { await saveBlob(await post('/api/export', state.result), 'Ban-nhan-xet.docx'); } catch (e) { alert(e.message); }
   btn.disabled = false;
 });
-$('restart').addEventListener('click', () => { if (confirm('Bắt đầu lại? Bản nhận xét hiện tại sẽ bị xóa khỏi màn hình (hãy tải về trước).')) { state.works = []; state.result = null; renderWorks(); go(2); } });
+$('zipBtn').addEventListener('click', async () => {
+  const btn = $('zipBtn'); btn.disabled = true;
+  try { await saveBlob(await post('/api/export-zip', { results: Object.values(state.results) }), 'Cac-ban-nhan-xet.zip'); } catch (e) { alert(e.message); }
+  btn.disabled = false;
+});
+$('restart').addEventListener('click', () => { if (confirm('Làm lô công trình khác? Các bản nhận xét hiện tại sẽ bị xóa khỏi màn hình (hãy tải về trước).')) { state.works = []; state.result = null; state.results = {}; state.items = []; renderWorks(); go(2); } });
 
 // ---------- khởi động
 $('codeBtn').addEventListener('click', () => { state.code = $('codeInput').value; sessionStorage.setItem('code', state.code); init(); });

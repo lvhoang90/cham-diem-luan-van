@@ -20,6 +20,7 @@ const html = `${rd('artifact/head.html')}\n${rd('artifact/body.html')}
 <script>${safe(rd('node_modules/mammoth/mammoth.browser.min.js'))}</script>
 <script>${safe(rd('node_modules/docx/dist/index.iife.js'))}</script>
 <script>${safe(rd('node_modules/pdfjs-dist/build/pdf.min.js'))}</script>
+<script>${safe(rd('node_modules/jszip/dist/jszip.min.js'))}</script>
 <script>
 ${safe(prompts)}
 ${safe(worker)}

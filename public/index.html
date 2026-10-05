@@ -51,7 +51,7 @@
   <!-- Bước 2 -->
   <section id="step2" class="card step" hidden>
     <h2>Bước 2. Tải công trình cần phản biện</h2>
-    <p class="help">Có thể tải <b>nhiều tệp .docx hoặc PDF có chữ</b> (ví dụ từng chương của luận văn, luận án, hoặc đề cương kèm phụ lục). PDF phải có chữ chọn/sao chép được; bản scan (ảnh) sẽ bị từ chối. Các tệp sẽ được đọc như một công trình duy nhất theo thứ tự hiển thị dưới đây.</p>
+    <p class="help">Có thể tải <b>nhiều tệp .docx hoặc PDF có chữ</b>. <b>Mỗi tệp là một công trình riêng (của một người)</b>: hệ thống đọc tuần tự từng tệp, nhận xét riêng và xuất một bản nhận xét .docx riêng cho từng công trình. Nếu một công trình gồm nhiều chương, hãy gộp thành một tệp trước khi tải. PDF phải có chữ chọn/sao chép được; bản scan (ảnh) sẽ bị từ chối.</p>
     <label class="drop" id="drop2" tabindex="0">
       <input type="file" id="file2" accept=".docx,.pdf" multiple hidden>
       <strong>Nhấn để chọn một hoặc nhiều tệp .docx / PDF</strong> hoặc kéo thả vào đây
@@ -92,9 +92,10 @@
     <div id="runBox" hidden>
       <div class="bar"><div id="barFill"></div></div>
       <p id="runMsg" class="muted" role="status"></p>
+      <ol id="queue" class="queue"></ol>
     </div>
     <div id="runErr" class="alert danger" hidden></div>
-    <div class="actions"><button class="btn" data-go="3" id="back3">‹ Quay lại</button><button id="runBtn" class="btn primary">Bắt đầu phân tích</button></div>
+    <div class="actions"><button class="btn" data-go="3" id="back3">‹ Quay lại</button><span><button id="stopBtn" class="btn" hidden>Dừng sau công trình hiện tại</button> <button id="runBtn" class="btn primary">Bắt đầu phân tích</button></span></div>
   </section>
 
   <!-- Bước 5 -->
@@ -106,7 +107,8 @@
 <footer class="wrap foot">Bản nháp do AI hỗ trợ soạn thảo, không thay thế phán đoán chuyên môn và trách nhiệm của người phản biện.</footer>
 <div id="bar5" class="stick" hidden>
   <button id="restart" class="btn">Làm công trình khác</button>
-  <button id="exportBtn" class="btn primary">Tải bản nhận xét (.docx)</button>
+  <button id="zipBtn" class="btn" hidden>Tải tất cả (.zip)</button>
+  <button id="exportBtn" class="btn primary">Tải bản nhận xét đang xem (.docx)</button>
 </div>
 <script src="app.js" type="module"></script>
 </body>

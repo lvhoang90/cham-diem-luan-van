@@ -26,6 +26,19 @@ const SAMPLE_WORK = [
   ['bold', 'Tài liệu tham khảo'],
   ['li', 'Phạm (2021). Học tập trực tuyến trong đại dịch. Tạp chí Giáo dục, 12(3), 45–52.'],
 ];
+const SAMPLE_WORK2 = [
+  ['heading', 'Mối liên hệ giữa thời gian sử dụng mạng xã hội và mức độ tập trung học tập của học sinh trung học cơ sở tại một huyện', 1],
+  ['bold', '1. Lý do chọn đề tài'],
+  ['p', 'Học sinh trung học cơ sở dành nhiều thời gian cho mạng xã hội, trong khi giáo viên phản ánh tình trạng mất tập trung trong giờ học. Các nghiên cứu trước chủ yếu thực hiện ở bậc đại học, còn ở bậc trung học cơ sở tại địa bàn nông thôn thì số liệu còn ít, đây là khoảng trống mà đề tài hướng tới.'],
+  ['bold', '2. Mục tiêu và câu hỏi nghiên cứu'],
+  ['p', 'Đề tài nhằm mô tả thời gian sử dụng mạng xã hội và xem xét mối liên hệ giữa thời gian đó với mức độ tập trung học tập của học sinh. Câu hỏi nghiên cứu: (1) Học sinh dành bao nhiêu thời gian mỗi ngày cho mạng xã hội? (2) Thời gian này có liên quan thế nào đến mức độ tập trung học tập tự đánh giá? Giả thuyết: thời gian sử dụng càng nhiều thì mức độ tập trung càng thấp.'],
+  ['bold', '3. Phương pháp nghiên cứu'],
+  ['p', 'Nghiên cứu cắt ngang bằng bảng hỏi. Tổng thể là học sinh lớp 8 và lớp 9 của ba trường trong huyện; dự kiến chọn mẫu phân tầng theo trường và khối lớp, cỡ mẫu 300 học sinh. Thang đo tập trung được điều chỉnh từ một thang đo đã công bố và sẽ được thử nghiệm trên 30 học sinh trước khi khảo sát chính thức, đánh giá độ tin cậy bằng hệ số Cronbach alpha. Dữ liệu được phân tích bằng thống kê mô tả và tương quan.'],
+  ['bold', '4. Đạo đức nghiên cứu và kế hoạch'],
+  ['p', 'Đề tài xin sự đồng ý của nhà trường và phụ huynh, học sinh tham gia tự nguyện, bảng hỏi ẩn danh. Kế hoạch thực hiện trong sáu tháng gồm hoàn thiện công cụ, khảo sát, phân tích và viết báo cáo.'],
+  ['bold', 'Tài liệu tham khảo'],
+  ['li', 'Danh mục tài liệu tham khảo sẽ được bổ sung khi hoàn thiện đề cương.'],
+];
 const sampleFile = (name, arr) => fileFromBlocks(name, arr.map(([kind, text, level]) => (kind === 'row' ? { kind: 'row', text: `${text} | [ô trống]`, cells: [text, '[ô trống]'] } : kind === 'heading' ? { kind, text, level } : kind === 'li' ? { kind, text, depth: 0 } : { kind, text })));
 
 /* ===== Trạng thái và tiện ích giao diện ===== */
@@ -68,8 +81,8 @@ dropzone($('drop1'), $('file1'), (files) => {
 });
 $('useSample').addEventListener('click', () => {
   state.tplFile = sampleFile('Mẫu phiếu nhận xét (ví dụ).docx', SAMPLE_TEMPLATE); state.tplSample = true;
-  state.works = [sampleFile('Đề cương thử (ví dụ).docx', SAMPLE_WORK)]; state.works[0].sample = true;
-  $('name1').textContent = 'Đã chọn bộ ví dụ: mẫu phiếu nhận xét và một đề cương thử (văn bản do hệ thống tạo để thử nghiệm).';
+  state.works = [sampleFile('Đề cương thử 1 (ví dụ).docx', SAMPLE_WORK), sampleFile('Đề cương thử 2 (ví dụ).docx', SAMPLE_WORK2)]; state.works.forEach((w) => { w.sample = true; });
+  $('name1').textContent = 'Đã chọn bộ ví dụ: mẫu phiếu nhận xét và hai đề cương thử của hai người khác nhau (văn bản do hệ thống tạo để thử nghiệm).';
   $('analyze').disabled = false; $('tplResult').hidden = true; renderWorks();
 });
 $('analyze').addEventListener('click', async () => {
@@ -116,22 +129,46 @@ function renderConfirm() {
   $('confirm').replaceChildren(h('div', {}, h('b', {}, 'Mẫu: '), state.template?.template_title || ''), h('div', {}, h('b', {}, 'Công trình: '), state.works.map((f) => f.filename).join('; ')),
     h('div', {}, h('b', {}, 'Loại văn bản: '), $('docType').selectedOptions[0]?.textContent || '', ' · ', h('b', {}, 'Vai trò: '), $('role').selectedOptions[0]?.textContent || ''));
 }
+const ST = { queued: 'Chờ đến lượt', running: 'Đang phân tích', done: 'Xong', error: 'Lỗi', cancelled: 'Đã dừng' };
+function drawQueue() {
+  const items = state.items;
+  $('queue').replaceChildren(...items.map((it) => h('li', { class: 'q ' + it.status },
+    h('div', { class: 'qh' }, h('span', { class: 'qn' }, it.filename), h('span', { class: 'badge' }, ST[it.status])),
+    it.status === 'running' ? h('div', { class: 'bar' }, h('div', { class: 'fill', style: `width:${it.progress}%` })) : null,
+    h('div', { class: 'muted' }, it.status === 'error' ? it.error : it.status === 'done' ? `Điểm đề xuất ${it.result.score.score100}/100 — ${it.result.decision.short}` : it.message || ''))));
+  const done = items.filter((i) => ['done', 'error', 'cancelled'].includes(i.status)).length;
+  $('barFill').style.width = Math.max(3, Math.round((done / items.length) * 100)) + '%';
+  $('runMsg').textContent = `Đã xử lý ${done}/${items.length} công trình (tuần tự, mỗi công trình một bản nhận xét riêng).`;
+}
 let tick;
 $('runBtn').addEventListener('click', async () => {
   $('runErr').hidden = true; $('runBox').hidden = false; $('runBtn').disabled = true; $('back3').disabled = true; $('stopBtn').hidden = false;
-  state.ctl = new AbortController(); const t0 = Date.now(); let base = 'Đang bắt đầu…';
-  $('barFill').style.width = '3%'; $('runMsg').textContent = base;
-  clearInterval(tick); tick = setInterval(() => { $('runMsg').textContent = `${base} (${Math.round((Date.now() - t0) / 1000)} giây)`; }, 1000);
-  const onProgress = (p, m) => { $('barFill').style.width = p + '%'; base = m; };
-  try {
-    state.result = await runReview({ template: state.template, workFiles: state.works, meta: { docType: $('docType').value, role: $('role').value, field: $('field').value.trim(), notes: $('notes').value.trim() }, onProgress, signal: state.ctl.signal });
-    renderResult(); go(5);
-  } catch (e) {
-    $('runErr').textContent = e instanceof AppError ? e.message : 'Có lỗi khi phân tích. Vui lòng thử lại.'; $('runErr').hidden = false;
+  state.ctl = new AbortController(); const t0 = Date.now();
+  state.items = state.works.map((w) => ({ filename: w.filename, status: 'queued', progress: 0, message: 'Đang chờ đến lượt' }));
+  state.results = {}; drawQueue();
+  const meta = { docType: $('docType').value, role: $('role').value, field: $('field').value.trim(), notes: $('notes').value.trim() };
+  clearInterval(tick); tick = setInterval(() => { for (const it of state.items) if (it.status === 'running') it.message = it.base ? `${it.base} (${Math.round((Date.now() - it.t0) / 1000)} giây)` : it.message; drawQueue(); }, 1000);
+  // Mỗi tệp là một công trình của một người: đọc tuần tự, mỗi công trình một lượt phân tích riêng, không dùng chung ngữ cảnh.
+  for (let i = 0; i < state.works.length; i++) {
+    const it = state.items[i];
+    if (state.ctl.signal.aborted) { it.status = 'cancelled'; it.message = 'Đã dừng'; continue; }
+    it.status = 'running'; it.progress = 3; it.t0 = Date.now(); it.base = 'Đang bắt đầu…';
+    try {
+      it.result = await runReview({ template: state.template, workFiles: [state.works[i]], meta, onProgress: (p, m) => { it.progress = p; it.base = m; }, signal: state.ctl.signal });
+      it.status = 'done'; it.progress = 100; state.results[i] = it.result; delete it.base;
+    } catch (e) {
+      if (e?.code === 'cancelled' || state.ctl.signal.aborted) { it.status = 'cancelled'; it.message = 'Đã dừng'; }
+      else { it.status = 'error'; it.error = e instanceof AppError ? e.message : 'Có lỗi khi phân tích công trình này. Vui lòng thử lại.'; }
+    }
+    drawQueue();
   }
-  clearInterval(tick); $('runBtn').disabled = false; $('back3').disabled = false; $('stopBtn').hidden = true;
+  clearInterval(tick); drawQueue();
+  $('runBtn').disabled = false; $('back3').disabled = false; $('stopBtn').hidden = true;
+  const first = state.items.findIndex((i) => i.status === 'done');
+  if (first < 0) { $('runErr').textContent = 'Không có công trình nào được phân tích thành công. Xem lý do ở từng tệp phía trên.'; $('runErr').hidden = false; return; }
+  state.cur = first; renderResults(); go(5);
 });
-$('stopBtn').addEventListener('click', () => state.ctl?.abort());
+$('stopBtn').addEventListener('click', () => { state.ctl?.abort(); $('stopBtn').hidden = true; });
 
 /* ===== Bước 5: kết quả ===== */
 const PRI = { bat_buoc: 'Bắt buộc', nen_lam: 'Nên thực hiện', goi_y: 'Gợi ý' };
@@ -141,12 +178,29 @@ function area(value, onInput, rows) {
   const fit = () => { t.style.height = 'auto'; t.style.height = Math.max(t.scrollHeight + 2, 60) + 'px'; };
   t.addEventListener('input', () => { onInput(t.value); fit(); }); setTimeout(fit, 0); return t;
 }
+function renderResults() {
+  $('result').replaceChildren(h('h2', {}, 'Bước 5. Bản nháp nhận xét — mỗi công trình một bản riêng'), h('p', { class: 'help' }, 'Mỗi tệp được phân tích độc lập, không lẫn nội dung giữa các tác giả. Chọn một dòng để xem, sửa và lưu bản nhận xét của công trình đó.'), h('div', { id: 'summary', class: 'tablewrap' }), h('div', { id: 'detail' }));
+  drawSummary(); renderDetail();
+  $('zipBtn').hidden = Object.keys(state.results).length < 2;
+}
+function drawSummary() {
+  const rows = state.items.map((it, i) => {
+    const r = state.results[i];
+    return h('tr', { class: r && i === state.cur ? 'cur' : '' },
+      h('td', {}, h('b', {}, it.filename), r?.profile?.title && r.profile.title !== 'Không xác định' ? h('div', { class: 'muted' }, r.profile.title) : null, !r ? h('div', { class: 'muted' }, it.status === 'error' ? it.error : ST[it.status]) : null),
+      h('td', { class: 'n' }, r ? String(r.score.score100) : '—'),
+      h('td', {}, r ? h('span', { class: 'pill ' + r.decision.severity }, r.decision.short, r.decision.belowPass ? ' ⚠' : '') : ''),
+      h('td', {}, r ? h('button', { class: 'btn link', onclick: () => { state.cur = i; drawSummary(); renderDetail(); $('detail').scrollIntoView({ behavior: 'smooth' }); } }, 'Xem / sửa') : null));
+  });
+  $('summary').replaceChildren(h('table', {}, h('thead', {}, h('tr', {}, h('th', {}, 'Công trình (tệp)'), h('th', { class: 'n' }, 'Điểm /100'), h('th', {}, 'Khuyến nghị'), h('th', {}, ''))), h('tbody', {}, rows)));
+}
+
 function recompute() {
   const r = state.result;
   const sumMax = r.score.rows.reduce((s, x) => s + x.max, 0), sum = r.score.rows.reduce((s, x) => s + x.points, 0);
   r.score.sum = round1(sum); r.score.sumMax = sumMax; r.score.score100 = sumMax ? round1((sum / sumMax) * 100) : 0;
   r.decision = { ...decide(r.score.score100, r.fatalDefects), mismatch: null };
-  drawVerdict();
+  drawVerdict(); drawSummary();
 }
 function drawVerdict() {
   const r = state.result, d = r.decision, sc = r.score;
@@ -159,9 +213,9 @@ function drawVerdict() {
     d.floorApplied ? h('p', { class: 'muted' }, 'Khuyến nghị được hạ mức do có khuyết điểm nghiêm trọng, dù điểm số cao hơn.') : null,
     d.mismatch ? h('p', { class: 'muted' }, `Nhận định văn bản của mô hình (${d.mismatch.modelLabel}) khác mức theo ngưỡng điểm; xin cân nhắc.`) : null));
 }
-function renderResult() {
-  const r = state.result, root = $('result'); root.replaceChildren();
-  root.append(h('h2', {}, 'Bước 5. Bản nháp nhận xét và đề xuất điểm'), h('div', { id: 'verdict' }));
+function renderDetail() {
+  const r = state.result = state.results[state.cur], root = $('detail'); root.replaceChildren();
+  root.append(h('h3', { class: 'who' }, 'Công trình: ', r.files[0].name, r.profile?.title && r.profile.title !== 'Không xác định' ? h('div', { class: 'muted' }, r.profile.title + (r.profile.author && r.profile.author !== 'Không xác định' ? ` — ${r.profile.author}` : '')) : null), h('div', { id: 'verdict' }));
   if (r.warnings.length) root.append(h('div', { class: 'alert caution' }, r.warnings.map((w) => h('div', {}, w))));
   root.append(h('p', { class: 'muted' }, `Đã đối chiếu ${r.verification.kept} đoạn trích với bản gốc; loại ${r.verification.dropped} đoạn không khớp. Quý vị có thể sửa trực tiếp mọi nội dung và điểm dưới đây trước khi lưu.`));
   const tbody = h('tbody');
@@ -241,20 +295,32 @@ async function buildDocx(r) {
     sections: [{ properties: { page: { margin: { top: 1134, bottom: 1134, left: 1701, right: 1134 } } }, footers: { default: new Footer({ children: [new Paragraph({ alignment: AlignmentType.CENTER, children: [new TextRun({ children: [PageNumber.CURRENT], font: FONT, size: 22 })] })] }) }, children: body }] });
   return Packer.toBlob(doc);
 }
-$('exportBtn').addEventListener('click', async () => {
-  const btn = $('exportBtn'); btn.disabled = true;
+/* Tên tệp nhận xét theo công trình (đồng bộ với server/export-docx.js) */
+function exportFileName(r) {
+  const base = String(r?.files?.[0]?.name || 'cong-trinh').replace(/\.(docx|pdf)$/i, '').replace(/[\\/:*?"<>|\u0000-\u001f]+/g, ' ').replace(/\s+/g, ' ').trim().slice(0, 120) || 'cong-trinh';
+  return `Nhan-xet - ${base}.docx`;
+}
+function uniqueName(name, used) { let n = name, i = 2; while (used.has(n.toLowerCase())) n = name.replace(/\.docx$/, ` (${i++}).docx`); used.add(n.toLowerCase()); return n; }
+async function saveFile(btn, make) {
+  btn.disabled = true;
   const old = $('saveMsg'); if (old) old.remove();
   const say = (m) => $('bar5').prepend(h('span', { id: 'saveMsg', class: 'muted', role: 'status', style: 'align-self:center;margin-right:auto' }, m));
   try {
     const dl = await claude.use('downloads');
     if (!dl) throw { code: 'unavailable' };
-    const blob = await buildDocx(state.result);
-    await dl.save({ filename: 'Ban-nhan-xet-phan-bien.docx', data: blob });
+    const { filename, data } = await make();
+    await dl.save({ filename, data });
     say('Đã gửi tệp để lưu.');
   } catch (e) { say(e?.code === 'declined' ? 'Đã hủy lưu.' : e?.code === 'unavailable' ? 'Chế độ xem này không cho lưu tệp. Hãy mở trang trong claude.ai.' : 'Không lưu được tệp. Vui lòng thử lại.'); }
   btn.disabled = false;
-});
-$('restart').addEventListener('click', () => { state.works = []; state.result = null; renderWorks(); go(2); });
+}
+$('exportBtn').addEventListener('click', () => saveFile($('exportBtn'), async () => ({ filename: exportFileName(state.result), data: await buildDocx(state.result) })));
+$('zipBtn').addEventListener('click', () => saveFile($('zipBtn'), async () => {
+  const zip = new JSZip(), used = new Set();
+  for (const r of Object.values(state.results)) zip.file(uniqueName(exportFileName(r), used), await buildDocx(r));
+  return { filename: 'Cac-ban-nhan-xet.zip', data: await zip.generateAsync({ type: 'blob', compression: 'DEFLATE' }) };
+}));
+$('restart').addEventListener('click', () => { state.works = []; state.result = null; state.results = {}; state.items = []; renderWorks(); go(2); });
 
 /* ===== Khởi động ===== */
 for (const [id, map] of [['docType', DOC_TYPES], ['role', ROLES]]) $(id).replaceChildren(...Object.entries(map).map(([k, v]) => h('option', { value: k }, v)));

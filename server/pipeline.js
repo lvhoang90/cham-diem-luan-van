@@ -19,7 +19,7 @@ export async function analyzeTemplate(templateFile) {
       system: SYSTEM_TEMPLATE,
       user: templatePrompt(corpusToText(corpus, { withFileTags: false })),
       schema: TEMPLATE_SCHEMA,
-      maxTokens: 16000,
+      maxTokens: 32000,
       effort: 'medium',
     });
   }

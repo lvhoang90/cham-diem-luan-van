@@ -2,7 +2,8 @@ process.env.MOCK_LLM = '1'; // phải đặt trước khi nạp mô-đun (import
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import mammoth from 'mammoth';
-import { templateDocx, workDocx } from './helpers.js';
+import JSZip from 'jszip';
+import { templateDocx, workDocx, makePdf } from './helpers.js';
 
 const { createApp } = await import('../server/index.js');
 const { assemble, normalizeTemplate } = await import('../server/pipeline.js');
@@ -16,34 +17,66 @@ test.after(() => server.close());
 const form = (entries) => { const fd = new FormData(); for (const [k, v, n] of entries) (n ? fd.append(k, v, n) : fd.append(k, v)); return fd; };
 const docxBlob = (buf) => new Blob([buf], { type: 'application/vnd.openxmlformats-officedocument.wordprocessingml.document' });
 
-test('luồng đầy đủ: mẫu → công trình → kết quả → xuất .docx đúng khung mẫu', async () => {
+test('luồng đầy đủ: nhiều công trình của nhiều người → mỗi tệp một kết quả riêng, một .docx riêng, không lẫn nhau', async () => {
   const t = await (await fetch(`${base}/api/template`, { method: 'POST', body: form([['template', docxBlob(await templateDocx()), 'mau.docx']]) })).json();
-  assert.equal(t.template.sections.length, 5); // tiêu đề + 4 mục (demo suy từ tiêu đề/in đậm)
+  assert.equal(t.template.sections.length, 5);
   assert.ok(t.template.info_fields.some((f) => f.label === 'Đề tài'));
 
-  const works = [await workDocx(), await workDocx('Chương 2. Phương pháp')];
-  const res = await fetch(`${base}/api/review`, { method: 'POST', body: form([['templateId', t.templateId], ['docType', 'dissertation'], ['role', 'reviewer'], ...works.map((w, i) => ['works', docxBlob(w), `c${i}.docx`])]) });
+  const works = [
+    ['Nguyễn Văn A - de cuong.docx', await workDocx('Đề tài của người thứ nhất về năng lực tự học')],
+    ['Trần Thị B - de cuong.docx', await workDocx('Đề tài của người thứ hai về chuyển đổi số trong trường học')],
+  ];
+  const res = await fetch(`${base}/api/review`, { method: 'POST', body: form([['templateId', t.templateId], ['docType', 'proposal'], ['role', 'reviewer'], ...works.map(([n, w]) => ['works', docxBlob(w), n])]) });
   assert.equal(res.status, 202);
-  const { jobId } = await res.json();
+  const { jobId, count } = await res.json();
+  assert.equal(count, 2);
   let job;
-  for (let i = 0; i < 50; i++) { job = await (await fetch(`${base}/api/review/${jobId}`)).json(); if (job.status !== 'running') break; await new Promise((r) => setTimeout(r, 50)); }
-  assert.equal(job.status, 'done', job.error);
-  const r = job.result;
-  assert.equal(r.sections.length, t.template.sections.length);
-  assert.deepEqual(r.sections.map((s) => s.title), t.template.sections.map((s) => s.title));
-  assert.equal(r.score.scheme, 'default');
-  assert.equal(r.score.sumMax, 100);
-  assert.ok(r.verification.dropped >= 1, 'trích dẫn bịa phải bị loại');
-  assert.ok(r.sections.every((s) => s.evidence.every((e) => !/không hề có/.test(e.quote))));
-  assert.ok(['reject', 'major_revision', 'minor_revision', 'accept_with_conditions', 'accept'].includes(r.decision.key));
+  for (let i = 0; i < 100; i++) { job = await (await fetch(`${base}/api/review/${jobId}`)).json(); if (job.status !== 'running') break; await new Promise((r) => setTimeout(r, 50)); }
+  assert.equal(job.status, 'done');
+  assert.deepEqual(job.items.map((x) => x.status), ['done', 'done']);
+  assert.deepEqual(job.items.map((x) => x.filename), works.map(([n]) => n));
 
-  const ex = await fetch(`${base}/api/export`, { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify(r) });
+  const results = [];
+  for (const it of job.items) results.push(await (await fetch(`${base}/api/review/${jobId}/${it.index}`)).json());
+  // Mỗi kết quả chỉ thuộc về tệp của chính nó.
+  results.forEach((r, i) => {
+    assert.equal(r.files.length, 1);
+    assert.equal(r.files[0].name, works[i][0]);
+    assert.equal(r.sections.length, t.template.sections.length);
+    assert.deepEqual(r.sections.map((s) => s.title), t.template.sections.map((s) => s.title));
+    assert.equal(r.score.scheme, 'default');
+    assert.equal(r.score.sumMax, 100);
+    assert.ok(r.verification.dropped >= 1, 'trích dẫn bịa phải bị loại');
+    const quotes = r.sections.flatMap((s) => s.evidence.map((e) => e.quote)).join(' ');
+    assert.ok(r.info.some((x) => x.value.includes(i === 0 ? 'người thứ nhất' : 'người thứ hai')), 'thông tin đề tài lấy đúng từ tệp của mình');
+    assert.ok(!quotes.includes(i === 0 ? 'người thứ hai' : 'người thứ nhất'));
+  });
+
+  const ex = await fetch(`${base}/api/export`, { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify(results[1]) });
   assert.equal(ex.status, 200);
-  const buf = Buffer.from(await ex.arrayBuffer());
-  const { value } = await mammoth.extractRawText({ buffer: buf });
+  assert.match(decodeURIComponent(ex.headers.get('content-disposition')), /Nhan-xet - Trần Thị B - de cuong\.docx/);
+  const { value } = await mammoth.extractRawText({ buffer: Buffer.from(await ex.arrayBuffer()) });
   for (const s of t.template.sections) assert.ok(value.includes(s.title), `thiếu mục ${s.title}`);
   assert.ok(value.includes('ĐỀ XUẤT ĐIỂM VÀ KHUYẾN NGHỊ'));
-  assert.ok(value.includes('DEMO'));
+  assert.ok(value.includes('Trần Thị B - de cuong.docx'));
+  assert.ok(!value.includes('Nguyễn Văn A'));
+
+  const zipRes = await fetch(`${base}/api/export-zip`, { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ results }) });
+  assert.equal(zipRes.status, 200);
+  const zip = await JSZip.loadAsync(Buffer.from(await zipRes.arrayBuffer()));
+  assert.deepEqual(Object.keys(zip.files).sort(), ['Nhan-xet - Nguyễn Văn A - de cuong.docx', 'Nhan-xet - Trần Thị B - de cuong.docx']);
+});
+
+test('một công trình lỗi (PDF scan) không làm dừng các công trình khác; có thể dừng giữa chừng', async () => {
+  const t = await (await fetch(`${base}/api/template`, { method: 'POST', body: form([['template', docxBlob(await templateDocx()), 'mau.docx']]) })).json();
+  const scan = await makePdf([[], []], { imageOnly: true });
+  const res = await fetch(`${base}/api/review`, { method: 'POST', body: form([['templateId', t.templateId], ['works', new Blob([scan]), 'scan.pdf'], ['works', docxBlob(await workDocx()), 'tot.docx']]) });
+  const { jobId } = await res.json();
+  let job;
+  for (let i = 0; i < 100; i++) { job = await (await fetch(`${base}/api/review/${jobId}`)).json(); if (job.status !== 'running') break; await new Promise((r) => setTimeout(r, 50)); }
+  assert.deepEqual(job.items.map((x) => x.status), ['error', 'done']);
+  assert.match(job.items[0].error, /bản scan/);
+  assert.equal((await fetch(`${base}/api/review/${jobId}/0`)).status, 409);
 });
 
 test('từ chối tệp không phải docx và mẫu hết hạn', async () => {

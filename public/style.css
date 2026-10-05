@@ -53,3 +53,10 @@ details.sec .body{padding-bottom:14px}.sec h4{margin:.9rem 0 .2rem;font-size:.95
 .stick{position:sticky;bottom:0;background:var(--card);border-top:1px solid var(--line);padding:10px 16px;display:flex;gap:10px;justify-content:flex-end}
 .foot{color:var(--muted);font-size:.85rem;padding:20px 16px 40px}
 @media print{.stick,.top,.steps{display:none}}
+
+.queue{list-style:none;padding:0;margin:8px 0}.queue .q{border:1px solid var(--line);border-radius:10px;padding:8px 12px;margin:6px 0}
+.queue .qh{display:flex;justify-content:space-between;gap:8px}.queue .qn{font-weight:600;overflow-wrap:anywhere}
+.queue .q.running{border-color:var(--accent)}.queue .q.error{border-color:var(--danger)}.queue .bar{height:8px;margin:6px 0}.queue .fill{height:100%;background:var(--accent);transition:width .6s}
+.pill{display:inline-block;padding:2px 10px;border-radius:99px;font-size:.85rem;font-weight:600}
+.pill.danger{background:var(--danger-bg);color:var(--danger)}.pill.warning{background:var(--warning-bg);color:var(--warning)}.pill.caution{background:var(--caution-bg);color:var(--caution)}.pill.ok{background:var(--ok-bg);color:var(--ok)}
+tr.cur td{background:var(--bg)}h3.who{margin:1.4rem 0 .3rem;padding-top:1rem;border-top:2px solid var(--line)}

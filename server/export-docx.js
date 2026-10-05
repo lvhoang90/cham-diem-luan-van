@@ -39,12 +39,27 @@ function evidenceBlock(evs) {
   return out;
 }
 
+/** Tên tệp nhận xét theo công trình: "Nhan-xet - <tên tệp gốc>.docx". */
+export function exportFileName(r) {
+  const base = String(r?.files?.[0]?.name || 'cong-trinh').replace(/\.(docx|pdf)$/i, '').replace(/[\\/:*?"<>|\u0000-\u001f]+/g, ' ').replace(/\s+/g, ' ').trim().slice(0, 120) || 'cong-trinh';
+  return `Nhan-xet - ${base}.docx`;
+}
+export function uniqueName(name, used) {
+  let n = name, i = 2;
+  while (used.has(n.toLowerCase())) n = name.replace(/\.docx$/, ` (${i++}).docx`);
+  used.add(n.toLowerCase());
+  return n;
+}
+
 export async function buildDocx(r) {
   const body = [];
   const t = r.template || {};
   body.push(new Paragraph({ alignment: AlignmentType.CENTER, spacing: { after: 60 }, children: [run(s(t.title || 'PHIẾU NHẬN XÉT').toUpperCase(), { bold: true, size: 30 })] }));
   body.push(new Paragraph({ alignment: AlignmentType.CENTER, spacing: { after: 200 }, children: [run(r.demo ? 'BẢN DEMO — NỘI DUNG MINH HỌA, KHÔNG PHẢI ĐÁNH GIÁ THẬT' : 'Bản nháp do hệ thống hỗ trợ soạn thảo — người nhận xét thẩm định, chỉnh sửa và chịu trách nhiệm về nội dung cuối cùng', { italics: true, size: 22 })] }));
 
+  // Mỗi bản nhận xét nêu rõ công trình nào để không nhầm giữa nhiều tác giả.
+  const wk = r.files?.[0]?.name;
+  if (wk) body.push(new Paragraph({ alignment: AlignmentType.CENTER, spacing: { after: 160 }, children: [run(`Công trình: ${s(r.profile?.title && r.profile.title !== 'Không xác định' ? r.profile.title + ' — ' : '')}tệp “${s(wk)}”`, { size: 22 })] }));
   const info = (r.info || []).filter((x) => x.label);
   if (info.length) {
     body.push(new Table({ width: { size: 100, type: WidthType.PERCENTAGE }, rows: info.map((x) => new TableRow({ children: [cell(x.label, 35, { bold: true }), cell(x.value, 65)] })) }));

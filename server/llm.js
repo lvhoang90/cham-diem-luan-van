@@ -31,7 +31,7 @@ async function stream(params) {
 }
 
 /** Gọi mô hình và nhận JSON đúng schema (structured outputs). */
-export async function callJson({ system, user, schema, maxTokens = 64000, effort = config.effort }) {
+export async function callJson({ system, user, schema, maxTokens = config.maxOutputTokens, effort = config.effort }) {
   const msg = await stream({
     model: config.model,
     max_tokens: maxTokens,
@@ -49,7 +49,7 @@ export async function callJson({ system, user, schema, maxTokens = 64000, effort
 }
 
 /** Gọi mô hình lấy văn bản tự do (dùng cho ghi chú đọc từng phần). */
-export async function callText({ system, user, maxTokens = 32000, effort = 'medium' }) {
+export async function callText({ system, user, maxTokens = Math.min(64000, config.maxOutputTokens), effort = 'medium' }) {
   const msg = await stream({
     model: config.model,
     max_tokens: maxTokens,
