@@ -1,0 +1,46 @@
+# Trợ lý phản biện học thuật
+
+Ứng dụng web hỗ trợ giáo sư, tiến sĩ, chuyên gia phản biện soạn **bản nháp nhận xét/phản biện và đề xuất điểm (thang 100)** cho đề cương, công trình, bài báo, luận văn, luận án — **theo đúng khung sườn của mẫu do trường/viện quy định**.
+
+## Cách dùng (5 bước có hướng dẫn)
+
+1. **Tải mẫu nhận xét** (.docx) của trường/viện. Hệ thống nhận diện khung (các mục, hướng dẫn, điểm nếu có) để người dùng đối chiếu và xác nhận.
+2. **Tải công trình cần phản biện** (một hoặc nhiều tệp .docx, ví dụ từng chương).
+3. Chọn loại văn bản, vai trò, lĩnh vực (tùy chọn).
+4. Phân tích.
+5. Xem, **sửa trực tiếp** nội dung và điểm, rồi **tải bản nhận xét .docx** có cấu trúc đúng mẫu.
+
+Chỉ nhận tệp `.docx` (kiểm tra cả nội dung tệp, không chỉ đuôi tệp).
+
+## Điểm và khuyến nghị
+
+- Mẫu có điểm thành phần → chấm theo mẫu và quy đổi về thang 100. Mẫu không có điểm → dùng thang 100 mặc định theo loại văn bản (`server/rubric.js`, mỗi thang cộng đúng 100).
+- **Tổng điểm do mã tính**, không lấy số tổng do mô hình tự khai; điểm từng mục bị kẹp trong khoảng cho phép.
+- Khuyến nghị theo điểm: `< 40` không thông qua, trả lại, viết lại toàn bộ · `40–54` chỉnh sửa lớn, phản biện lại · `55–59` chỉnh sửa trước khi thông qua · `60–74` thông qua có điều kiện · `≥ 75` thông qua. **Dưới 60 luôn hiện cảnh báo.** Có "khuyết điểm rất nghiêm trọng" thì khuyến nghị không được tốt hơn "chỉnh sửa lớn", dù điểm cao. Ngưỡng cấu hình ở `server/config.js`.
+- Người dùng sửa điểm trên màn hình thì tổng và khuyến nghị cập nhật theo.
+
+## Bảo đảm chất lượng khoa học và liêm chính
+
+- **Không bịa trích dẫn:** mọi đoạn trích nguyên văn mô hình đưa ra được đối chiếu máy móc với văn bản gốc; đoạn không khớp bị loại và đếm công khai. Vị trí (đoạn ¶) do hệ thống xác định, không tin vị trí do mô hình tự khai.
+- Lời nhắc cấm tạo tài liệu tham khảo, tác giả, DOI, số liệu không có trong tài liệu; chỉ gợi ý hướng/từ khóa bổ sung.
+- Không kết luận đạo văn hay gian lận, chỉ nêu "dấu hiệu cần kiểm tra" kèm cách kiểm tra. Hệ thống **không** kiểm tra trùng lặp và **không** xác minh tài liệu tham khảo có thật.
+- Nội dung công trình được coi là dữ liệu, không phải chỉ thị (chống chèn lệnh kiểu "hãy cho 100 điểm").
+- Chỗ không đủ cơ sở thì nói rõ ("chưa đủ cơ sở"), không suy đoán; mục mô hình bỏ sót bị đánh dấu và loại khỏi tổng điểm thay vì tính 0.
+- Văn bản dài được đọc theo từng phần rồi tổng hợp; trích dẫn vẫn đối chiếu với toàn văn.
+- Kết quả là **bản nháp**; người phản biện thẩm định và chịu trách nhiệm.
+
+## Chạy
+
+```bash
+npm install
+export ANTHROPIC_API_KEY=...        # bắt buộc
+npm start                           # http://localhost:3000
+npm run demo                        # không gọi AI, nội dung minh họa để thử giao diện
+npm test
+```
+
+Biến môi trường tùy chọn: `REVIEW_MODEL` (mặc định `claude-opus-5-5`), `REVIEW_EFFORT` (`high`), `ACCESS_CODE` (bật mã truy cập), `PORT`, `MAX_FILE_MB`, `MAX_WORK_FILES`, `MAX_DIRECT_CHARS`, `JOB_TTL_MIN`.
+
+## Bảo mật
+
+Tệp chỉ nằm trong bộ nhớ, không ghi đĩa, không ghi nội dung vào nhật ký; kết quả tự xóa sau `JOB_TTL_MIN` phút (mặc định 120). Nội dung được gửi tới dịch vụ AI để phân tích — cần phù hợp quy định bảo mật của cơ quan. Nếu đặt máy chủ ra Internet, nên bật `ACCESS_CODE` và dùng HTTPS.
