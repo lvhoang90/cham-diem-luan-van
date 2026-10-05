@@ -14,9 +14,23 @@ const ERR_COPY = {
   empty_completion: 'Claude không trả lời. Vui lòng thử lại.',
   cancelled: 'Đã dừng.',
 };
-async function ask(prompt, { tier = 'default', signal } = {}) {
+/* Ước lượng token (nền tảng không trả số token): ~2,6 ký tự/token với tiếng Việt; phần suy luận của mô hình tính bằng hệ số THINK_FACTOR trên đầu ra nhìn thấy. */
+const THINK_FACTOR = 2, PRICE_IN = 4, PRICE_OUT = 20, USD_VND = 25500; // giá tham khảo Claude Opus 5.5 (USD/triệu token)
+const estTok = (s) => Math.ceil(String(s).length / 2.6);
+const newMeter = () => ({ calls: 0, inTok: 0, outTok: 0 });
+function usageOf(m) {
+  const outTok = m.outTok * THINK_FACTOR, total = m.inTok + outTok;
+  const usd = (m.inTok * PRICE_IN + outTok * PRICE_OUT) / 1e6;
+  return { calls: m.calls, inputTokens: m.inTok, outputTokens: outTok, totalTokens: total, costUsd: Math.round(usd * 100) / 100, costVnd: Math.round((usd * USD_VND) / 100) * 100 };
+}
+const sumMeters = (list) => list.reduce((a, m) => ({ calls: a.calls + m.calls, inTok: a.inTok + m.inTok, outTok: a.outTok + m.outTok }), newMeter());
+async function ask(prompt, { tier = 'default', signal, meter } = {}) {
   if (byteLen(prompt) > SAMPLE_MAX_BYTES - 2000) throw new AppError(ERR_COPY.prompt_too_large);
-  try { return await sampleFn.json(prompt, { modelTier: tier, signal }); }
+  try {
+    const out = await sampleFn.json(prompt, { modelTier: tier, signal });
+    if (meter) { meter.calls++; meter.inTok += estTok(prompt); meter.outTok += estTok(JSON.stringify(out)); }
+    return out;
+  }
   catch (e) {
     if (e instanceof AppError) throw e;
     const err = new AppError(ERR_COPY[e?.code] || 'Có lỗi tạm thời từ dịch vụ AI. Vui lòng thử lại.');
@@ -67,9 +81,9 @@ function normalizeTemplate(t) {
     sections, scale_total: Math.max(0, Number(t.scale_total) || 0), scoring_notes: String(t.scoring_notes || ''),
   };
 }
-async function analyzeTemplate(file, signal) {
+async function analyzeTemplate(file, signal, meter) {
   const text = corpusToText(buildCorpus([file]), false);
-  return normalizeTemplate(await ask(templatePrompt(text), { tier: 'default', signal }));
+  return normalizeTemplate(await ask(templatePrompt(text), { tier: 'default', signal, meter }));
 }
 function chunkCorpus(corpus) {
   const chunks = []; let cur = [], len = 0;
@@ -82,7 +96,7 @@ function chunkCorpus(corpus) {
   if (cur.length) chunks.push(cur.join('\n'));
   return chunks;
 }
-async function runReview({ template, workFiles, meta: m, onProgress, signal }) {
+async function runReview({ template, workFiles, meta: m, onProgress, signal, meter }) {
   const corpus = buildCorpus(workFiles);
   const full = corpusToText(corpus);
   const useRubric = !template.sections.some((s) => s.max_points > 0);
@@ -96,7 +110,7 @@ async function runReview({ template, workFiles, meta: m, onProgress, signal }) {
     const notes = [];
     for (let i = 0; i < chunks.length; i++) {
       onProgress(8 + Math.round((i / chunks.length) * 30), `Công trình dài: đọc phần ${i + 1}/${chunks.length}…`);
-      const r = await ask(digestPrompt({ i: i + 1, n: chunks.length, text: chunks[i], outline: ctx.outline }), { tier: 'default', signal });
+      const r = await ask(digestPrompt({ i: i + 1, n: chunks.length, text: chunks[i], outline: ctx.outline }), { tier: 'default', signal, meter });
       notes.push(`--- PHẦN ${i + 1}/${chunks.length} ---\n${String(r?.notes ?? '')}`);
     }
     ctx.digests = notes.join('\n\n');
@@ -106,14 +120,14 @@ async function runReview({ template, workFiles, meta: m, onProgress, signal }) {
   const raw = { sections: [] };
   for (let i = 0; i < batches.length; i++) {
     onProgress(40 + Math.round((i / (batches.length + 1)) * 50), `Soạn nhận xét theo khung mẫu (${i + 1}/${batches.length})… có thể mất 1–3 phút`);
-    const r = await ask(sectionsPrompt(ctx, batches[i], i === 0), { tier: 'complex', signal });
+    const r = await ask(sectionsPrompt(ctx, batches[i], i === 0), { tier: 'complex', signal, meter });
     if (i === 0) { raw.document_profile = r.document_profile; raw.info_values = r.info_values; }
     raw.sections.push(...(r.sections || []));
   }
   onProgress(40 + Math.round((batches.length / (batches.length + 1)) * 50), 'Tổng hợp, chấm điểm và kết luận… có thể mất 1–3 phút');
   const titleOf = new Map(template.sections.map((s) => [s.id, s]));
   const enriched = raw.sections.map((s) => ({ ...s, title: titleOf.get(s.section_id)?.title || '', max_points: titleOf.get(s.section_id)?.max_points || 0, points: Number(s.points) || 0 }));
-  Object.assign(raw, await ask(overallPrompt(ctx, enriched), { tier: 'complex', signal }));
+  Object.assign(raw, await ask(overallPrompt(ctx, enriched), { tier: 'complex', signal, meter }));
   onProgress(95, 'Đối chiếu từng đoạn trích với bản gốc và tính điểm…');
   return assemble({ raw, template, corpus, meta: m, rubric, index: buildIndex(corpus), mode, workFiles });
 }

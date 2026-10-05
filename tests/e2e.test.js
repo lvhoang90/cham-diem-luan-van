@@ -1,4 +1,5 @@
-process.env.MOCK_LLM = '1'; // phải đặt trước khi nạp mô-đun (import tĩnh được nâng lên đầu tệp)
+process.env.MOCK_LLM = '1';
+process.env.USAGE_LOG = ''; // không ghi nhật ký khi chạy kiểm thử // phải đặt trước khi nạp mô-đun (import tĩnh được nâng lên đầu tệp)
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import mammoth from 'mammoth';
@@ -35,6 +36,10 @@ test('luồng đầy đủ: nhiều công trình của nhiều người → mỗ
   assert.equal(job.status, 'done');
   assert.deepEqual(job.items.map((x) => x.status), ['done', 'done']);
   assert.deepEqual(job.items.map((x) => x.filename), works.map(([n]) => n));
+  // Token và chi phí: tổng phiên = đọc mẫu + từng công trình.
+  assert.ok(job.usage.totalTokens > 0 && job.items.every((x) => x.usage.totalTokens > 0));
+  assert.equal(job.usage.totalTokens, t.usage.totalTokens + job.items.reduce((a, x) => a + x.usage.totalTokens, 0));
+  assert.equal(job.usage.estimated, true, 'chế độ demo phải gắn nhãn ước lượng');
 
   const results = [];
   for (const it of job.items) results.push(await (await fetch(`${base}/api/review/${jobId}/${it.index}`)).json());

@@ -1,5 +1,12 @@
 const $ = (id) => document.getElementById(id);
 const state = { step: 1, templateId: null, template: null, works: [], result: null, health: null, code: sessionStorage.getItem('code') || '' };
+const fmtTok = (n) => Number(n || 0).toLocaleString('vi-VN');
+function fmtCost(u) {
+  if (!u) return '';
+  if (!u.priceKnown || u.costUsd == null) return 'chưa có bảng giá cho mô hình này';
+  return `≈ $${u.costUsd.toFixed(2)} (≈ ${u.costVnd.toLocaleString('vi-VN')} đ)`;
+}
+const usageLine = (u) => (u ? `${fmtTok(u.totalTokens)} token (vào ${fmtTok(u.inputTokens)} · ra ${fmtTok(u.outputTokens)}) · ${fmtCost(u)}${u.estimated ? ' · ƯỚC LƯỢNG (chế độ demo)' : ''}` : '');
 const STEPS = ['Mẫu nhận xét', 'Công trình', 'Thông tin', 'Phân tích', 'Kết quả'];
 
 function h(tag, attrs = {}, ...kids) {
@@ -67,7 +74,7 @@ $('analyze').addEventListener('click', async () => {
   try {
     const fd = new FormData(); fd.append('template', tplFile);
     const r = await api('/api/template', { method: 'POST', body: fd });
-    state.templateId = r.templateId; state.template = r.template;
+    state.templateId = r.templateId; state.template = r.template; state.tplUsage = r.usage;
     renderTemplate(r.template);
   } catch (e) { alert(e.message); }
   btn.disabled = false; btn.textContent = 'Đọc mẫu và nhận diện khung';
@@ -79,6 +86,7 @@ function renderTemplate(t) {
     ? `Mẫu có quy định điểm (tổng tối đa ${t.scale_total || 'theo các mục'}); hệ thống sẽ quy đổi về thang 100.`
     : 'Mẫu không quy định điểm thành phần; hệ thống sẽ đề xuất điểm trên thang 100 theo tiêu chí mặc định phù hợp loại văn bản.');
   $('tplList').replaceChildren(...t.sections.map((s) => h('li', { class: 'l' + s.level }, `${s.number} ${s.title}`.trim(), h('span', { class: 'badge' }, KIND[s.kind] || s.kind), s.max_points ? h('span', { class: 'badge' }, `${s.max_points} điểm`) : null)));
+  $('tplCost').textContent = state.tplUsage ? `Chi phí đọc mẫu (tính một lần cho cả lô): ${usageLine(state.tplUsage)}.` : '';
   $('tplInfo').textContent = t.info_fields.length ? `Trường thông tin đầu mẫu: ${t.info_fields.map((f) => f.label).join('; ')}.` : '';
   $('tplResult').hidden = false;
 }
@@ -113,10 +121,11 @@ function drawQueue(items) {
   $('queue').replaceChildren(...items.map((it) => h('li', { class: 'q ' + it.status },
     h('div', { class: 'qh' }, h('span', { class: 'qn' }, it.filename), h('span', { class: 'badge' }, ST[it.status] || it.status)),
     it.status === 'running' ? h('div', { class: 'bar' }, h('div', { class: 'fill', style: `width:${it.progress}%` })) : null,
-    h('div', { class: 'muted' }, it.status === 'error' ? it.error : it.status === 'done' && it.summary ? `Điểm đề xuất ${it.summary.score100}/100 — ${it.summary.decision}` : it.message))));
+    h('div', { class: 'muted' }, it.status === 'error' ? it.error : it.status === 'done' && it.summary ? `Điểm đề xuất ${it.summary.score100}/100 — ${it.summary.decision}` : it.message),
+    it.usage && it.usage.totalTokens ? h('div', { class: 'muted' }, `Token/chi phí: ${usageLine(it.usage)}`) : null)));
   const done = items.filter((i) => ['done', 'error', 'cancelled'].includes(i.status)).length;
   $('barFill').style.width = Math.max(3, Math.round((done / items.length) * 100)) + '%';
-  $('runMsg').textContent = `Đã xử lý ${done}/${items.length} công trình (tuần tự, mỗi công trình một bản nhận xét riêng).`;
+  $('runMsg').textContent = `Đã xử lý ${done}/${items.length} công trình (tuần tự, mỗi công trình một bản nhận xét riêng).` + (state.usage ? ` Đã dùng: ${usageLine(state.usage)}.` : '');
 }
 let jobId = null;
 $('runBtn').addEventListener('click', async () => {
@@ -132,10 +141,10 @@ $('runBtn').addEventListener('click', async () => {
     for (;;) {
       await new Promise((r) => setTimeout(r, 2000));
       const j = await api('/api/review/' + jobId);
-      items = j.items; drawQueue(items);
+      items = j.items; state.usage = j.usage; drawQueue(items);
       if (j.status === 'done') break;
     }
-    state.results = {}; state.items = items;
+    state.results = {}; state.items = items; state.usage = (await api('/api/review/' + jobId)).usage;
     for (const it of items) if (it.status === 'done') state.results[it.index] = await api(`/api/review/${jobId}/${it.index}`);
     const first = items.find((i) => i.status === 'done');
     if (!first) throw new Error('Không có công trình nào được phân tích thành công. Xem lý do ở từng tệp phía trên.');
@@ -176,9 +185,25 @@ const DEC = {
 
 function renderResults() {
   const root = $('result');
-  root.replaceChildren(h('h2', {}, 'Bước 5. Bản nháp nhận xét — mỗi công trình một bản riêng'), h('p', { class: 'help' }, 'Mỗi tệp được phân tích độc lập, không lẫn nội dung giữa các tác giả. Chọn một dòng để xem, sửa và tải bản nhận xét của công trình đó.'), h('div', { id: 'summary', class: 'tablewrap' }), h('div', { id: 'detail' }));
-  drawSummary(); renderDetail();
+  root.replaceChildren(h('h2', {}, 'Bước 5. Bản nháp nhận xét — mỗi công trình một bản riêng'), h('div', { id: 'usagePanel', class: 'card' }), h('p', { class: 'help' }, 'Mỗi tệp được phân tích độc lập, không lẫn nội dung giữa các tác giả. Chọn một dòng để xem, sửa và tải bản nhận xét của công trình đó.'), h('div', { id: 'summary', class: 'tablewrap' }), h('div', { id: 'detail' }));
+  drawUsage(); drawSummary(); renderDetail();
   $('zipBtn').hidden = Object.keys(state.results).length < 2;
+}
+async function drawUsage() {
+  const u = state.usage, panel = $('usagePanel');
+  const rows = state.items.filter((it) => it.usage?.totalTokens).map((it) => h('tr', {}, h('td', {}, it.filename), h('td', { class: 'n' }, fmtTok(it.usage.totalTokens)), h('td', { class: 'n' }, fmtCost(it.usage))));
+  if (state.tplUsage) rows.unshift(h('tr', {}, h('td', {}, 'Đọc mẫu nhận xét (một lần)'), h('td', { class: 'n' }, fmtTok(state.tplUsage.totalTokens)), h('td', { class: 'n' }, fmtCost(state.tplUsage))));
+  const done = state.items.filter((i) => i.status === 'done').length;
+  panel.replaceChildren(
+    h('h3', { style: 'margin-top:0' }, 'Token và chi phí của phiên này'),
+    h('p', { class: 'score-line' }, h('b', {}, fmtTok(u?.totalTokens)), ' token', u ? ` (vào ${fmtTok(u.inputTokens)} · ra ${fmtTok(u.outputTokens)}, gồm cả phần mô hình suy luận)` : '', ' · ', h('b', {}, fmtCost(u)), done > 1 && u?.costUsd != null ? ` · trung bình ≈ $${(u.costUsd / done).toFixed(2)}/công trình` : ''),
+    u?.estimated ? h('p', { class: 'muted' }, 'Số liệu demo là ước lượng thô, không phải số token thật.') : h('p', { class: 'muted' }, `Token lấy từ số liệu thật của API; tiền tính theo giá công khai của ${u?.model || 'mô hình'} và tỷ giá tham khảo 1 USD ≈ ${fmtTok(u?.usdVnd)} đ (chỉnh bằng USD_VND). Đây là ước tính để theo dõi, không phải hóa đơn.`),
+    h('details', {}, h('summary', {}, 'Chi tiết theo từng công trình'), h('div', { class: 'tablewrap' }, h('table', {}, h('thead', {}, h('tr', {}, h('th', {}, 'Hạng mục'), h('th', { class: 'n' }, 'Token'), h('th', { class: 'n' }, 'Chi phí'))), h('tbody', {}, rows)))),
+    h('p', { class: 'muted', id: 'ledgerLine' }, ''));
+  try {
+    const l = await api('/api/usage');
+    if (l.enabled && !state.health.demo) $('ledgerLine').textContent = `Lũy kế theo nhật ký: hôm nay ${l.today.sessions} phiên · ${fmtTok(l.today.totalTokens)} token · ≈ $${l.today.costUsd.toFixed(2)}; tất cả ${l.all.sessions} phiên · ${fmtTok(l.all.totalTokens)} token · ≈ $${l.all.costUsd.toFixed(2)}.`;
+  } catch { /* không bắt buộc */ }
 }
 const SEV = { danger: 'danger', warning: 'warning', caution: 'caution', ok: 'ok' };
 function drawSummary() {

@@ -18,6 +18,9 @@ export const config = {
   chunkChars: num(process.env.CHUNK_CHARS, 400_000),
   maxTotalChars: num(process.env.MAX_TOTAL_CHARS, 6_000_000),
   jobTtlMs: num(process.env.JOB_TTL_MIN, 360) * 60_000,
+  // Theo dõi chi phí: tỷ giá tham khảo USD→VND (chỉnh bằng USD_VND) và nhật ký (chỉ số liệu, không có tên tệp/nội dung; đặt USAGE_LOG= để tắt).
+  usdVnd: num(process.env.USD_VND, 25500),
+  usageLog: process.env.USAGE_LOG === undefined ? 'usage-log.jsonl' : process.env.USAGE_LOG,
   // Ngưỡng điểm (thang 100) để phân loại khuyến nghị.
   thresholds: { reject: 40, major: 55, pass: 60, good: 75 },
 };

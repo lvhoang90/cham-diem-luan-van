@@ -10,10 +10,10 @@ import { mockTemplate, mockReview } from './mock.js';
 const noop = () => {};
 
 /** Bước 1: tách khung sườn của mẫu để người dùng xác nhận trước khi phân tích. */
-export async function analyzeTemplate(templateFile) {
+export async function analyzeTemplate(templateFile, meter) {
   const corpus = buildCorpus([templateFile]);
   let t;
-  if (config.mock) t = mockTemplate(templateFile);
+  if (config.mock) { t = mockTemplate(templateFile); meter?.addEstimate(JSON.stringify(templateFile.blocks).length + 3000, 1500); }
   else {
     t = await callJson({
       system: SYSTEM_TEMPLATE,
@@ -21,6 +21,7 @@ export async function analyzeTemplate(templateFile) {
       schema: TEMPLATE_SCHEMA,
       maxTokens: 32000,
       effort: 'medium',
+      meter,
     });
   }
   return normalizeTemplate(t);
@@ -86,7 +87,7 @@ async function pool(items, limit, fn) {
   return out;
 }
 
-export async function runReview({ template, workFiles, meta, onProgress = noop }) {
+export async function runReview({ template, workFiles, meta, onProgress = noop, meter }) {
   const corpus = buildCorpus(workFiles);
   const chars = corpusChars(corpus);
   if (chars > config.maxTotalChars) {
@@ -105,7 +106,7 @@ export async function runReview({ template, workFiles, meta, onProgress = noop }
     let done = 0;
     onProgress(10, `Công trình dài: đọc từng phần (0/${chunks.length})…`);
     const notes = await pool(chunks, 3, async (text, i) => {
-      const r = await callText({ user: digestPrompt({ i: i + 1, n: chunks.length, text, outline }) });
+      const r = await callText({ user: digestPrompt({ i: i + 1, n: chunks.length, text, outline }), meter });
       onProgress(10 + Math.round((++done / chunks.length) * 40), `Đọc từng phần (${done}/${chunks.length})…`);
       return `--- PHẦN ${i + 1}/${chunks.length} ---\n${r}`;
     });
@@ -115,7 +116,7 @@ export async function runReview({ template, workFiles, meta, onProgress = noop }
   onProgress(55, 'Soạn nhận xét theo khung mẫu và chấm điểm…');
   const schema = reviewSchema({ withRubric: useRubric });
   let raw;
-  if (config.mock) raw = mockReview({ template, corpus, rubric });
+  if (config.mock) { raw = mockReview({ template, corpus, rubric }); meter?.addEstimate(corpusToText(corpus).length + 12000, JSON.stringify(raw).length * 1.6); }
   else {
     raw = await callJson({
       system: SYSTEM_REVIEWER,
@@ -125,11 +126,14 @@ export async function runReview({ template, workFiles, meta, onProgress = noop }
         sizes: corpus.map((f) => `Tệp ${f.fileIndex}: ${f.filename}`).join('\n'),
       }),
       schema,
+      meter,
     });
   }
 
   onProgress(90, 'Đối chiếu từng đoạn trích với bản gốc và tính điểm…');
-  return assemble({ raw, template, corpus, meta, rubric, index, mode, workFiles });
+  const result = assemble({ raw, template, corpus, meta, rubric, index, mode, workFiles });
+  if (meter) result.usage = meter.snapshot();
+  return result;
 }
 
 export function assemble({ raw, template, corpus, meta, rubric, index, mode, workFiles }) {

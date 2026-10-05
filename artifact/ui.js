@@ -42,6 +42,8 @@ const SAMPLE_WORK2 = [
 const sampleFile = (name, arr) => fileFromBlocks(name, arr.map(([kind, text, level]) => (kind === 'row' ? { kind: 'row', text: `${text} | [ô trống]`, cells: [text, '[ô trống]'] } : kind === 'heading' ? { kind, text, level } : kind === 'li' ? { kind, text, depth: 0 } : { kind, text })));
 
 /* ===== Trạng thái và tiện ích giao diện ===== */
+const fmtTok = (n) => Number(n || 0).toLocaleString('vi-VN');
+const usageLine = (u) => `≈ ${fmtTok(u.totalTokens)} token (vào ${fmtTok(u.inputTokens)} · ra ${fmtTok(u.outputTokens)}) · ≈ $${u.costUsd.toFixed(2)} (≈ ${fmtTok(u.costVnd)} đ)`;
 const $ = (id) => document.getElementById(id);
 const state = { step: 1, template: null, works: [], result: null, tplFile: null, ctl: null };
 const STEPS = ['Mẫu nhận xét', 'Công trình', 'Thông tin', 'Phân tích', 'Kết quả'];
@@ -92,7 +94,7 @@ $('analyze').addEventListener('click', async () => {
   try {
     const file = state.tplSample ? state.tplFile : await readDocument(state.tplFile);
     state.tplParsed = file;
-    state.template = await analyzeTemplate(file);
+    state.tplMeter = newMeter(); state.template = await analyzeTemplate(file, undefined, state.tplMeter);
     renderTemplate(state.template);
   } catch (e) { $('tplBusy').textContent = e instanceof AppError ? e.message : 'Có lỗi khi đọc mẫu. Vui lòng thử lại.'; btn.disabled = false; btn.textContent = 'Đọc mẫu và nhận diện khung'; return; }
   $('tplBusy').hidden = true; btn.disabled = false; btn.textContent = 'Đọc mẫu và nhận diện khung';
@@ -102,6 +104,7 @@ function renderTemplate(t) {
   const scored = t.sections.some((s) => s.max_points > 0);
   $('tplSummary').textContent = `Mẫu “${t.template_title}” gồm ${t.sections.length} mục. ` + (scored ? `Mẫu có quy định điểm (tổng tối đa ${t.scale_total || 'theo các mục'}); hệ thống quy đổi về thang 100.` : 'Mẫu không quy định điểm thành phần; hệ thống đề xuất điểm trên thang 100 theo tiêu chí mặc định phù hợp loại văn bản.');
   $('tplList').replaceChildren(...t.sections.map((s) => h('li', { class: 'l' + s.level }, `${s.number} ${s.title}`.trim(), h('span', { class: 'badge' }, KIND[s.kind] || s.kind), s.max_points ? h('span', { class: 'badge' }, `${s.max_points} điểm`) : null)));
+  $('tplCost').textContent = state.tplMeter ? `Chi phí đọc mẫu (một lần cho cả lô, ước lượng): ${usageLine(usageOf(state.tplMeter))}.` : '';
   $('tplInfo').textContent = t.info_fields.length ? `Trường thông tin đầu mẫu: ${t.info_fields.map((f) => f.label).join('; ')}.` : '';
   $('tplResult').hidden = false;
 }
@@ -135,10 +138,11 @@ function drawQueue() {
   $('queue').replaceChildren(...items.map((it) => h('li', { class: 'q ' + it.status },
     h('div', { class: 'qh' }, h('span', { class: 'qn' }, it.filename), h('span', { class: 'badge' }, ST[it.status])),
     it.status === 'running' ? h('div', { class: 'bar' }, h('div', { class: 'fill', style: `width:${it.progress}%` })) : null,
-    h('div', { class: 'muted' }, it.status === 'error' ? it.error : it.status === 'done' ? `Điểm đề xuất ${it.result.score.score100}/100 — ${it.result.decision.short}` : it.message || ''))));
+    h('div', { class: 'muted' }, it.status === 'error' ? it.error : it.status === 'done' ? `Điểm đề xuất ${it.result.score.score100}/100 — ${it.result.decision.short}` : it.message || ''),
+    it.meter?.calls ? h('div', { class: 'muted' }, `Ước lượng đến nay: ${usageLine(usageOf(it.meter))}`) : null)));
   const done = items.filter((i) => ['done', 'error', 'cancelled'].includes(i.status)).length;
   $('barFill').style.width = Math.max(3, Math.round((done / items.length) * 100)) + '%';
-  $('runMsg').textContent = `Đã xử lý ${done}/${items.length} công trình (tuần tự, mỗi công trình một bản nhận xét riêng).`;
+  $('runMsg').textContent = `Đã xử lý ${done}/${items.length} công trình (tuần tự, mỗi công trình một bản nhận xét riêng). Đã dùng ${usageLine(usageOf(sumMeters([state.tplMeter || newMeter(), ...items.map((i) => i.meter || newMeter())])))}.`;
 }
 let tick;
 $('runBtn').addEventListener('click', async () => {
@@ -152,9 +156,9 @@ $('runBtn').addEventListener('click', async () => {
   for (let i = 0; i < state.works.length; i++) {
     const it = state.items[i];
     if (state.ctl.signal.aborted) { it.status = 'cancelled'; it.message = 'Đã dừng'; continue; }
-    it.status = 'running'; it.progress = 3; it.t0 = Date.now(); it.base = 'Đang bắt đầu…';
+    it.status = 'running'; it.progress = 3; it.t0 = Date.now(); it.base = 'Đang bắt đầu…'; it.meter = newMeter();
     try {
-      it.result = await runReview({ template: state.template, workFiles: [state.works[i]], meta, onProgress: (p, m) => { it.progress = p; it.base = m; }, signal: state.ctl.signal });
+      it.result = await runReview({ template: state.template, workFiles: [state.works[i]], meta, onProgress: (p, m) => { it.progress = p; it.base = m; }, signal: state.ctl.signal, meter: it.meter });
       it.status = 'done'; it.progress = 100; state.results[i] = it.result; delete it.base;
     } catch (e) {
       if (e?.code === 'cancelled' || state.ctl.signal.aborted) { it.status = 'cancelled'; it.message = 'Đã dừng'; }
@@ -179,9 +183,21 @@ function area(value, onInput, rows) {
   t.addEventListener('input', () => { onInput(t.value); fit(); }); setTimeout(fit, 0); return t;
 }
 function renderResults() {
-  $('result').replaceChildren(h('h2', {}, 'Bước 5. Bản nháp nhận xét — mỗi công trình một bản riêng'), h('p', { class: 'help' }, 'Mỗi tệp được phân tích độc lập, không lẫn nội dung giữa các tác giả. Chọn một dòng để xem, sửa và lưu bản nhận xét của công trình đó.'), h('div', { id: 'summary', class: 'tablewrap' }), h('div', { id: 'detail' }));
-  drawSummary(); renderDetail();
+  $('result').replaceChildren(h('h2', {}, 'Bước 5. Bản nháp nhận xét — mỗi công trình một bản riêng'), h('div', { id: 'usagePanel', class: 'card' }), h('p', { class: 'help' }, 'Mỗi tệp được phân tích độc lập, không lẫn nội dung giữa các tác giả. Chọn một dòng để xem, sửa và lưu bản nhận xét của công trình đó.'), h('div', { id: 'summary', class: 'tablewrap' }), h('div', { id: 'detail' }));
+  drawUsage(); drawSummary(); renderDetail();
   $('zipBtn').hidden = Object.keys(state.results).length < 2;
+}
+function drawUsage() {
+  const metered = state.items.filter((i) => i.meter?.calls);
+  const total = usageOf(sumMeters([state.tplMeter || newMeter(), ...metered.map((i) => i.meter)]));
+  const done = state.items.filter((i) => i.status === 'done').length;
+  const rows = metered.map((it) => { const u = usageOf(it.meter); return h('tr', {}, h('td', {}, it.filename), h('td', { class: 'n' }, fmtTok(u.totalTokens)), h('td', { class: 'n' }, `≈ $${u.costUsd.toFixed(2)}`)); });
+  if (state.tplMeter) { const u = usageOf(state.tplMeter); rows.unshift(h('tr', {}, h('td', {}, 'Đọc mẫu nhận xét (một lần)'), h('td', { class: 'n' }, fmtTok(u.totalTokens)), h('td', { class: 'n' }, `≈ $${u.costUsd.toFixed(2)}`))); }
+  $('usagePanel').replaceChildren(
+    h('h3', { style: 'margin-top:0' }, 'Token và chi phí của phiên này (ước lượng)'),
+    h('p', {}, h('b', {}, `≈ ${fmtTok(total.totalTokens)} token`), ` (vào ${fmtTok(total.inputTokens)} · ra ${fmtTok(total.outputTokens)}) · `, h('b', {}, `≈ $${total.costUsd.toFixed(2)} (≈ ${fmtTok(total.costVnd)} đ)`), done > 1 ? ` · trung bình ≈ $${(total.costUsd / done).toFixed(2)}/công trình` : ''),
+    h('p', { class: 'muted' }, 'Trang này không nhận được số token thật từ nền tảng nên chỉ ước lượng: khoảng 2,6 ký tự mỗi token với tiếng Việt, đầu ra nhân đôi để tính phần mô hình suy luận. Tiền tính theo giá API tham khảo của Claude Opus 5.5 ($4 vào / $20 ra mỗi triệu token), tỷ giá 1 USD ≈ 25.500 đ. Thực tế các lượt này trừ vào hạn mức gói Claude của người đang mở trang, không phát sinh hóa đơn API; sai số có thể vài chục phần trăm. Bản máy chủ ghi số token thật.'),
+    h('details', {}, h('summary', {}, 'Chi tiết theo từng công trình'), h('div', { class: 'tablewrap' }, h('table', {}, h('thead', {}, h('tr', {}, h('th', {}, 'Hạng mục'), h('th', { class: 'n' }, 'Token'), h('th', { class: 'n' }, 'Chi phí'))), h('tbody', {}, rows)))));
 }
 function drawSummary() {
   const rows = state.items.map((it, i) => {
