@@ -177,7 +177,7 @@ async function runBatch({ job, buffers, template, meta }) {
   job.status = 'done';
   const u = jobUsage(job);
   console.log(`[usage] ${job.items.filter((i) => i.status === 'done').length}/${job.items.length} công trình · ${u.totalTokens} token · ${u.costUsd == null ? 'chưa rõ giá' : '$' + u.costUsd}${u.estimated ? ' (ước lượng demo)' : ''}`);
-  appendLedger({ model: config.model, demo: config.mock, works: job.items.length, ok: job.items.filter((i) => i.status === 'done').length, inputTokens: u.inputTokens, outputTokens: u.outputTokens, totalTokens: u.totalTokens, costUsd: u.costUsd });
+  appendLedger({ model: config.model, demo: config.mock, works: job.items.length, ok: job.items.filter((i) => i.status === 'done').length, inputTokens: u.inputTokens, outputTokens: u.outputTokens, cacheWriteTokens: u.cacheWriteTokens, cacheReadTokens: u.cacheReadTokens, totalTokens: u.totalTokens, costUsd: u.costUsd });
 }
 
 function jobUsage(job) {

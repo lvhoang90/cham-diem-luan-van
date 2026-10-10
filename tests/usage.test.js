@@ -56,3 +56,15 @@ test('nhật ký chi phí chỉ có số liệu, tổng theo ngày/toàn bộ, b
   } finally { config.usageLog = ''; }
   assert.equal(readLedger().enabled, false);
 });
+
+test('bộ nhớ đệm: ghi tính 1,25 lần giá nhập, đọc tính 0,05 lần (Opus 5.5)', () => {
+  const m = new UsageMeter('claude-opus-5-5');
+  m.add({ input_tokens: 1_000, cache_creation_input_tokens: 100_000, output_tokens: 10_000 });
+  m.add({ input_tokens: 1_000, cache_read_input_tokens: 100_000, output_tokens: 10_000 });
+  const s = m.snapshot();
+  assert.equal(s.cacheWriteTokens, 100_000);
+  assert.equal(s.cacheReadTokens, 100_000);
+  assert.equal(s.inputTokens, 202_000);
+  // (2.000 + 100.000×1,25 + 100.000×0,05)×4 + 20.000×20, tính theo triệu token
+  assert.equal(s.costUsd, Math.round(((2_000 * 4 + 100_000 * 4 * 1.25 + 100_000 * 4 * 0.05 + 20_000 * 20) / 1e6) * 100) / 100);
+});

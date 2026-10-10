@@ -49,6 +49,8 @@ Sau mỗi phiên (mỗi lô công trình) màn hình kết quả hiện: tổng 
 - **Nhật ký lũy kế:** mỗi phiên ghi một dòng vào `usage-log.jsonl` (chỉ số liệu: thời điểm, mô hình, số công trình, token, USD; không có tên tệp hay nội dung), màn hình kết quả hiện tổng hôm nay và toàn bộ. Tắt bằng `USAGE_LOG=`; xem nhanh: `GET /api/usage`. Phiên demo không được tính.
 - **Bản artifact:** nền tảng không trả số token nên chỉ ước lượng (≈2,6 ký tự/token, đầu ra nhân đôi cho phần suy luận, giá tham khảo Opus 5.5); thực tế trừ vào hạn mức gói Claude của người xem. Sai số có thể vài chục phần trăm.
 
+Tối ưu chi phí và so sánh phương án: xem [`docs/CHI-PHI.md`](docs/CHI-PHI.md) (`node scripts/cost-model.mjs`).
+
 ## Bảo mật
 
 Tệp chỉ nằm trong bộ nhớ, không ghi đĩa, không ghi nội dung vào nhật ký; kết quả tự xóa sau `JOB_TTL_MIN` phút (mặc định 120). Nội dung được gửi tới dịch vụ AI để phân tích — cần phù hợp quy định bảo mật của cơ quan. Nếu đặt máy chủ ra Internet, nên bật `ACCESS_CODE` và dùng HTTPS.
