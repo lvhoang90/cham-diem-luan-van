@@ -31,7 +31,7 @@ async function stream(params) {
 }
 
 /** Gọi mô hình và nhận JSON đúng schema (structured outputs). */
-export async function callJson({ system, user, schema, maxTokens = config.maxOutputTokens, effort = config.effort }) {
+export async function callJson({ system, user, schema, maxTokens = config.maxOutputTokens, effort = config.effort, meter }) {
   const msg = await stream({
     model: config.model,
     max_tokens: maxTokens,
@@ -40,6 +40,7 @@ export async function callJson({ system, user, schema, maxTokens = config.maxOut
     output_config: { effort, format: { type: 'json_schema', schema } },
     messages: [{ role: 'user', content: user }],
   });
+  meter?.add(msg.usage);
   const raw = textOf(msg);
   try {
     return JSON.parse(raw);
@@ -49,7 +50,7 @@ export async function callJson({ system, user, schema, maxTokens = config.maxOut
 }
 
 /** Gọi mô hình lấy văn bản tự do (dùng cho ghi chú đọc từng phần). */
-export async function callText({ system, user, maxTokens = Math.min(64000, config.maxOutputTokens), effort = 'medium' }) {
+export async function callText({ system, user, maxTokens = Math.min(64000, config.maxOutputTokens), effort = 'medium', meter }) {
   const msg = await stream({
     model: config.model,
     max_tokens: maxTokens,
@@ -58,5 +59,6 @@ export async function callText({ system, user, maxTokens = Math.min(64000, confi
     output_config: { effort },
     messages: [{ role: 'user', content: user }],
   });
+  meter?.add(msg.usage);
   return textOf(msg);
 }

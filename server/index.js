@@ -6,6 +6,7 @@ import { fileURLToPath } from 'node:url';
 import { config } from './config.js';
 import { readDocument, DocxError } from './docx-read.js';
 import { analyzeTemplate, runReview } from './pipeline.js';
+import { UsageMeter, sumSnapshots, appendLedger, readLedger } from './usage.js';
 import JSZip from 'jszip';
 import { buildDocx, exportFileName, uniqueName } from './export-docx.js';
 import { DOC_TYPES, ROLES } from './rubric.js';
@@ -47,16 +48,18 @@ export function createApp() {
     try {
       if (!req.file) throw new DocxError('Chưa chọn tệp mẫu nhận xét.');
       const file = await readDocument(req.file.buffer, fixName(req.file.originalname));
-      const template = await analyzeTemplate(file);
-      res.json({ templateId: put('template', template), filename: file.filename, words: file.words, template });
+      const meter = new UsageMeter();
+      const template = await analyzeTemplate(file, meter);
+      const usage = meter.snapshot();
+      res.json({ templateId: put('template', { template, usage }), filename: file.filename, words: file.words, template, usage });
     } catch (e) { next(e); }
   });
 
   // Bước 2–4: mỗi tệp là MỘT công trình của MỘT người; đọc tuần tự, mỗi công trình một lượt phân tích riêng.
   app.post('/api/review', upload.array('works', config.maxWorkFiles), async (req, res, next) => {
     try {
-      const template = get('template', String(req.body.templateId || ''));
-      if (!template) throw new DocxError('Mẫu nhận xét đã hết hạn hoặc chưa được tải. Vui lòng quay lại Bước 1.');
+      const tpl = get('template', String(req.body.templateId || ''));
+      if (!tpl) throw new DocxError('Mẫu nhận xét đã hết hạn hoặc chưa được tải. Vui lòng quay lại Bước 1.');
       if (!req.files?.length) throw new DocxError('Chưa chọn tệp công trình cần phản biện.');
       const meta = {
         docType: req.body.docType in DOC_TYPES ? req.body.docType : 'other',
@@ -66,12 +69,12 @@ export function createApp() {
       };
       const buffers = req.files.map((f) => ({ name: fixName(f.originalname), buffer: f.buffer }));
       const job = {
-        status: 'running', cancelled: false,
+        status: 'running', cancelled: false, templateUsage: tpl.usage,
         items: buffers.map((b, index) => ({ index, filename: b.name, status: 'queued', progress: 0, message: 'Đang chờ đến lượt' })),
       };
       const id = put('job', job);
       res.status(202).json({ jobId: id, count: job.items.length });
-      runBatch({ job, buffers, template, meta });
+      runBatch({ job, buffers, template: tpl.template, meta });
     } catch (e) { next(e); }
   });
 
@@ -81,12 +84,16 @@ export function createApp() {
     if (!job) return res.status(404).json({ error: 'Phiên làm việc đã hết hạn. Vui lòng thực hiện lại.' });
     res.json({
       status: job.status,
-      items: job.items.map(({ index, filename, status, progress, message, error, result }) => ({
-        index, filename, status, progress, message, error,
+      usage: jobUsage(job),
+      items: job.items.map(({ index, filename, status, progress, message, error, result, meter }) => ({
+        index, filename, status, progress, message, error, usage: meter?.snapshot(),
         summary: result ? { score100: result.score.score100, decision: result.decision.short, severity: result.decision.severity, belowPass: result.decision.belowPass, title: result.profile?.title || '', author: result.profile?.author || '' } : undefined,
       })),
     });
   });
+
+  // Tổng số liệu đã ghi nhật ký (chỉ số, không có tên tệp/nội dung).
+  app.get('/api/usage', (_req, res) => res.json(readLedger()));
 
   app.get('/api/review/:id/:index', (req, res) => {
     const job = get('job', req.params.id);
@@ -149,11 +156,11 @@ export function createApp() {
 async function runBatch({ job, buffers, template, meta }) {
   const work = async (item) => {
     if (job.cancelled) { item.status = 'cancelled'; item.message = 'Đã dừng'; buffers[item.index] = null; return; }
-    item.status = 'running'; item.message = 'Đang đọc tệp…'; item.progress = 3;
+    item.status = 'running'; item.message = 'Đang đọc tệp…'; item.progress = 3; item.meter = new UsageMeter();
     try {
       const file = await readDocument(buffers[item.index].buffer, item.filename);
       buffers[item.index] = null;
-      item.result = await runReview({ template, workFiles: [file], meta, onProgress: (p, m) => { item.progress = p; item.message = m; } });
+      item.result = await runReview({ template, workFiles: [file], meta, onProgress: (p, m) => { item.progress = p; item.message = m; }, meter: item.meter });
       item.status = 'done'; item.progress = 100; item.message = 'Hoàn thành';
     } catch (e) {
       buffers[item.index] = null;
@@ -168,6 +175,13 @@ async function runBatch({ job, buffers, template, meta }) {
     while (next < job.items.length) await work(job.items[next++]);
   }));
   job.status = 'done';
+  const u = jobUsage(job);
+  console.log(`[usage] ${job.items.filter((i) => i.status === 'done').length}/${job.items.length} công trình · ${u.totalTokens} token · ${u.costUsd == null ? 'chưa rõ giá' : '$' + u.costUsd}${u.estimated ? ' (ước lượng demo)' : ''}`);
+  appendLedger({ model: config.model, demo: config.mock, works: job.items.length, ok: job.items.filter((i) => i.status === 'done').length, inputTokens: u.inputTokens, outputTokens: u.outputTokens, totalTokens: u.totalTokens, costUsd: u.costUsd });
+}
+
+function jobUsage(job) {
+  return sumSnapshots([job.templateUsage, ...job.items.filter((i) => i.meter).map((i) => i.meter.snapshot())].filter(Boolean));
 }
 
 // multer đọc tên tệp UTF-8 như latin1; sửa lại để hiển thị đúng tiếng Việt.

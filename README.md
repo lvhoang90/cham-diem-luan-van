@@ -41,6 +41,14 @@ npm test
 
 Biến môi trường tùy chọn: `REVIEW_MODEL` (mặc định `claude-opus-5-5`), `REVIEW_EFFORT` (`high`), `ACCESS_CODE` (bật mã truy cập), `PORT`, `MAX_FILE_MB` (60), `MAX_WORK_FILES` (40 công trình mỗi lô), `BATCH_CONCURRENCY` (1 = tuần tự), `MAX_OUTPUT_TOKENS` (128000), `MAX_DIRECT_CHARS` (1.000.000 ký tự đọc nguyên văn một lượt; dài hơn thì đọc từng phần), `JOB_TTL_MIN` (360).
 
+## Theo dõi token và chi phí
+
+Sau mỗi phiên (mỗi lô công trình) màn hình kết quả hiện: tổng token (vào/ra, gồm cả phần mô hình suy luận), chi phí ước tính theo USD và VND, trung bình mỗi công trình, và chi tiết từng công trình (kèm chi phí đọc mẫu, tính một lần cho cả lô). Trong lúc chạy cũng có số liệu cộng dồn theo từng tệp.
+
+- **Bản máy chủ:** token lấy từ số liệu thật của API (`usage`); tiền = token × giá công khai của mô hình (`server/usage.js`, ghi đè bằng `PRICE_INPUT_PER_MTOK`/`PRICE_OUTPUT_PER_MTOK`), tỷ giá tham khảo `USD_VND` (mặc định 25.500). Mô hình không có trong bảng giá thì chỉ hiện token, không bịa số tiền. Đây là ước tính để theo dõi, không phải hóa đơn.
+- **Nhật ký lũy kế:** mỗi phiên ghi một dòng vào `usage-log.jsonl` (chỉ số liệu: thời điểm, mô hình, số công trình, token, USD; không có tên tệp hay nội dung), màn hình kết quả hiện tổng hôm nay và toàn bộ. Tắt bằng `USAGE_LOG=`; xem nhanh: `GET /api/usage`. Phiên demo không được tính.
+- **Bản artifact:** nền tảng không trả số token nên chỉ ước lượng (≈2,6 ký tự/token, đầu ra nhân đôi cho phần suy luận, giá tham khảo Opus 5.5); thực tế trừ vào hạn mức gói Claude của người xem. Sai số có thể vài chục phần trăm.
+
 ## Bảo mật
 
 Tệp chỉ nằm trong bộ nhớ, không ghi đĩa, không ghi nội dung vào nhật ký; kết quả tự xóa sau `JOB_TTL_MIN` phút (mặc định 120). Nội dung được gửi tới dịch vụ AI để phân tích — cần phù hợp quy định bảo mật của cơ quan. Nếu đặt máy chủ ra Internet, nên bật `ACCESS_CODE` và dùng HTTPS.
@@ -52,3 +60,7 @@ Tệp chỉ nằm trong bộ nhớ, không ghi đĩa, không ghi nội dung vào
 ```bash
 node scripts/build-artifact.mjs   # ra artifact/dist/tro-ly-phan-bien.html
 ```
+
+## Tích hợp vào dự án khác
+
+Xem [`docs/TICH-HOP.md`](docs/TICH-HOP.md): cách lấy mã, chạy như dịch vụ (API HTTP) hoặc nhúng các mô-đun lõi.

@@ -95,6 +95,8 @@ export const DECISIONS = {
   },
 };
 
+export const UNSCORED = { key: 'unscored', short: 'Chưa có điểm', label: 'Chưa chấm được điểm — người phản biện cần tự chấm', severity: 'caution', advice: 'Hệ thống không nhận được đủ điểm thành phần cho công trình này. Vui lòng chạy lại riêng công trình này hoặc tự chấm điểm trong bảng điểm; khuyến nghị sẽ tự cập nhật khi có điểm.', floorApplied: false, belowPass: false };
+
 const ORDER = ['reject', 'major_revision', 'minor_revision', 'accept_with_conditions', 'accept'];
 
 export function decisionFromScore(score, t = config.thresholds) {
