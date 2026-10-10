@@ -1,6 +1,7 @@
 import mammoth from 'mammoth';
 import * as cheerio from 'cheerio';
 import JSZip from 'jszip';
+import { dropLeaderLines } from './pdf-layout.js';
 
 export class DocxError extends Error {}
 
@@ -41,7 +42,7 @@ export async function readDocx(buffer, filename) {
   } catch {
     throw new DocxError(`Không đọc được nội dung tệp "${filename}".`);
   }
-  const blocks = htmlToBlocks(html);
+  const blocks = dropLeaderLines(htmlToBlocks(html));
   if (blocks.length === 0) {
     throw new DocxError(`Tệp "${filename}" không có văn bản đọc được (có thể chỉ chứa hình ảnh/bản scan).`);
   }

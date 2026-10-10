@@ -1,7 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { readDocument, DocxError } from '../server/docx-read.js';
-import { layoutPdfPages, pdfTextProblem } from '../server/pdf-layout.js';
+import { layoutPdfPages, pdfTextProblem, dropLeaderLines } from '../server/pdf-layout.js';
 import { makePdf } from './helpers.js';
 
 const para = (s) => ({ t: s });
@@ -48,4 +48,16 @@ test('pdfTextProblem và layout: ngưỡng', () => {
   const blocks = layoutPdfPages([[{ str: 'Chương 1', x: 60, y: 700, h: 16 }, { str: 'Nội dung dòng một', x: 60, y: 660, h: 12 }, { str: 'tiếp tục dòng hai.', x: 60, y: 646, h: 12 }]]);
   assert.equal(blocks[0].kind, 'bold');
   assert.equal(blocks[1].text, 'Nội dung dòng một tiếp tục dòng hai.');
+});
+
+test('bỏ dòng mục lục có dấu chấm dẫn, giữ nguyên các dòng khác', () => {
+  const blocks = [
+    { kind: 'p', text: '1.1. Lý do chọn đề tài ........................ 12' },
+    { kind: 'p', text: 'Chương 2. Phương pháp . . . . . . . . . 25' },
+    { kind: 'row', text: 'a | b', cells: ['Hình 2.3. Mô hình', '…………… 31'] },
+    { kind: 'p', text: 'Kết quả cho thấy 85% học sinh sử dụng công cụ này. Giá trị p = 0.05.' },
+    { kind: 'p', text: 'Năm 2023... tác giả đề xuất 3 giải pháp.' },
+  ];
+  const out = dropLeaderLines(blocks);
+  assert.deepEqual(out.map((b) => b.text), ['Kết quả cho thấy 85% học sinh sử dụng công cụ này. Giá trị p = 0.05.', 'Năm 2023... tác giả đề xuất 3 giải pháp.']);
 });

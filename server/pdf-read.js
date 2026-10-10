@@ -1,5 +1,5 @@
 import { createRequire } from 'node:module';
-import { layoutPdfPages, pdfTextProblem } from './pdf-layout.js';
+import { layoutPdfPages, pdfTextProblem, dropLeaderLines } from './pdf-layout.js';
 import { DocxError } from './docx-read.js';
 
 const require = createRequire(import.meta.url);
@@ -34,7 +34,7 @@ export async function readPdf(buffer, filename) {
     const problem = pdfTextProblem(pages.map((it) => it.map((i) => i.str).join(' ')));
     if (problem === 'scan') throw new DocxError(PDF_SCAN_MSG(filename));
     if (problem === 'encoding') throw new DocxError(PDF_ENC_MSG(filename));
-    const blocks = layoutPdfPages(pages);
+    const blocks = dropLeaderLines(layoutPdfPages(pages));
     if (!blocks.length) throw new DocxError(PDF_SCAN_MSG(filename));
     const words = blocks.reduce((s, b) => s + (b.text.match(/\S+/g) || []).length, 0);
     return { filename, blocks, words, pages: doc.numPages };

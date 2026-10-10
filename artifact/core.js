@@ -88,7 +88,7 @@ async function readPdf(file) {
     const problem = pdfTextProblem(pages.map((it) => it.map((i) => i.str).join(' ')));
     if (problem === 'scan') throw new AppError(PDF_SCAN_MSG(name));
     if (problem === 'encoding') throw new AppError(PDF_ENC_MSG(name));
-    const blocks = layoutPdfPages(pages);
+    const blocks = dropLeaderLines(layoutPdfPages(pages));
     if (!blocks.length) throw new AppError(PDF_SCAN_MSG(name));
     return fileFromBlocks(name, blocks);
   } finally { doc.destroy(); }
@@ -104,7 +104,7 @@ async function readDocx(file) {
   try {
     ({ value: html } = await mammoth.convertToHtml({ arrayBuffer: buf }, { convertImage: mammoth.images.imgElement(() => Promise.resolve({ src: 'x', alt: '[hình/biểu đồ]' })) }));
   } catch { throw new AppError(`Không đọc được nội dung tệp "${name}". Tệp có thể bị hỏng.`); }
-  const blocks = htmlToBlocks(html);
+  const blocks = dropLeaderLines(htmlToBlocks(html));
   if (!blocks.length) throw new AppError(`Tệp "${name}" không có văn bản đọc được (có thể chỉ chứa hình ảnh/bản scan).`);
   return fileFromBlocks(name, blocks);
 }

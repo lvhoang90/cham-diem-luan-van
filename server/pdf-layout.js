@@ -69,3 +69,9 @@ export function pdfTextProblem(pageTexts) {
   if (letters < 0.4 * all.replace(/\s/g, '').length || weird / Math.max(1, all.length) > 0.03) return 'encoding';
   return null;
 }
+
+/** Bỏ các dòng mục lục có dấu chấm dẫn ("1.2. Mục tiêu ........ 15"): không có giá trị phản biện, chỉ tốn token. */
+export function dropLeaderLines(blocks) {
+  const LEADER = /(?:\s?\.){5,}\s*\d{1,4}\s*$|…{2,}\s*\d{1,4}\s*$/;
+  return blocks.filter((b) => !LEADER.test(b.kind === 'row' ? b.cells.join(' ') : b.text));
+}
