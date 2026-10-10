@@ -60,3 +60,7 @@ Tệp chỉ nằm trong bộ nhớ, không ghi đĩa, không ghi nội dung vào
 ```bash
 node scripts/build-artifact.mjs   # ra artifact/dist/tro-ly-phan-bien.html
 ```
+
+## Tích hợp vào dự án khác
+
+Xem [`docs/TICH-HOP.md`](docs/TICH-HOP.md): cách lấy mã, chạy như dịch vụ (API HTTP) hoặc nhúng các mô-đun lõi.
